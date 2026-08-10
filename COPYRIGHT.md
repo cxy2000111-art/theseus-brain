@@ -1,6 +1,8 @@
 # 版权与署名
 
-《忒修斯之脑》 Theseus' Brain
+*[English](COPYRIGHT.en.md)*
+
+《忒修斯之脑》 The Brain of Theseus
 
 ## 作者
 
@@ -14,6 +16,14 @@
 | **Claude Fable 5** | 最初的游戏框架与基础机制：轮回、两套记忆、机化率不可逆 |
 | **Claude Opus 5** | 引擎实现、七道门禁、工具链；八条派系线与作者手写稿的装配与校订 |
 | **Claude Opus 4.6** | 八条派系线的初稿，以及大量事件与终幕文案 |
+
+## 英文版译者
+
+**Claude Opus 5**（`translated from the Chinese by Claude Opus 5`）
+
+中文是原文。英文是同一个引擎上的语言层（`THESEUS_LANG=en`），不是分叉：
+每一条译文都存着当时的中文原文，中文一改，受影响的那几条自动回落中文，
+不会悄悄落后。
 
 ## 两份许可证
 

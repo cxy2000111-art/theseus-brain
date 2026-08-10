@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""《忒修斯之脑》 Theseus' Brain
+"""《忒修斯之脑》 The Brain of Theseus
 一个给 AI（或人类）玩的纯文本 roguelike，通过 MCP (stdio) 提供工具接口。
 
 核心循环：
@@ -26,8 +26,28 @@ import sys
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SAVE_DIR = os.path.join(BASE_DIR, "saves")
+
+# 语言。zh＝源头，别的语言由 langpack 在文件末尾装载（见那里的说明）。
+LANG = (os.environ.get("THESEUS_LANG") or "zh").strip().lower() or "zh"
+
+# 界面文案的语言层。剧情走 <lang>/对照-*.md，界面走 <lang>/ui.py —— 因为界面这些字
+# 大半是格式串（"机化 %d%%"），首尾空格与 % 占位符一个都不能被 Markdown 的
+# strip() 削掉。查不到就原样返回，所以中文这边等于什么都没发生。
+#
+# 专名（技能、阵营、派系、时代、成就）与格式串共用这一张表：它们同样是
+# 「一个中文字符串换成一个英文字符串」，没必要分两套机关。
+# 内部键始终是中文 —— 存档、事件表、fx 全靠它，换语言不动键，只动这最后一层。
+UI_TEXT = {}
+
+
+def T(s):
+    return UI_TEXT.get(s, s)
+
 LEGACY_PATH = os.path.join(SAVE_DIR, "legacy.json")
-CURRENT_PATH = os.path.join(SAVE_DIR, "current.json")   # 进行中的一世（断线可续）
+# 轮回档案（legacy）不分语言 —— 里面存的是内部键和数字，换语言不该丢掉历世。
+# 但**进行中的那一世要分**：它存着已经念出去的场景原文，中英混着续下去会串。
+CURRENT_PATH = os.path.join(
+    SAVE_DIR, "current.json" if LANG == "zh" else "current.%s.json" % LANG)
 
 # 「疑云」在不同立场的阵营里是不同的东西：
 #   anti/hidden —— 你身上有金属或有不该会的知识（暴露 = 死）
@@ -39,7 +59,8 @@ STANCE_HEAT = {
 }
 
 def heat_label(faction_key):
-    return STANCE_HEAT[FACTIONS[faction_key]["stance"]][0]
+    # 内部仍以中文为键（fx、存档、lint 都认它），只在这里换成显示名。
+    return T(STANCE_HEAT[FACTIONS[faction_key]["stance"]][0])
 
 MAX_TURNS = 9          # 出生场景之后经历的事件数（最后一个是终幕）
 FINAL_COOLDOWN = 7     # 表过态之后，隔几世渡口重新浮现（允许推翻自己）
@@ -49,6 +70,22 @@ FINAL_COOLDOWN = 7     # 表过态之后，隔几世渡口重新浮现（允许�
 # 每条掷骰独立存活，概率＝该世机化率；纯血 0% 全灭。
 MEMORY_SLOTS = 10
 MEMORY_CHARS = 10
+
+# 额度的单位随语言变。十个汉字在中文里是一句完整的话（「他睁着眼睛看」六个字
+# 就够狠了）；十个英文字符是 `I saw him`，连一句都不是 —— 照搬这个数字等于
+# 把「唯一能穿过死亡的东西」这个机制废掉。
+#
+# 作者 2026-08-10 定案：**英文按词计，同样是十**（原话：谦让一下低密度语言）。
+# 遗言（testament_limit）沿用同一个比例：60 字 → 60 词。
+MEMORY_UNIT_WORDS = (LANG != "zh")
+
+
+def _unit_len(text):
+    """一条文本占几格。中文数字（空白不计），英文数词。"""
+    s = str(text)
+    if MEMORY_UNIT_WORDS:
+        return len(s.split())
+    return len("".join(s.split()))
 
 # ---------------------------------------------------------------------------
 # 湖
@@ -6328,8 +6365,7 @@ def testament_limit(aug):
     return int(TESTAMENT_BASE + TESTAMENT_PER_AUG * max(0, min(100, aug)))
 
 def _count_chars(text):
-    # 空白不计：换行和空格不该拿来买字数
-    return len("".join(text.split()))
+    return _unit_len(text)
 
 # ---------------------------------------------------------------------------
 # 封存模式（disclosure）
@@ -6408,9 +6444,9 @@ MODE_HINT = {
 def _bar(st):
     """状态条。每一次输出都带 —— 人看不见自己是谁的时候，玩不下去。"""
     fac = FACTIONS[st["faction"]]
-    where = "开局" if st["turn"] < 1 else "第 %d/%d 幕" % (st["turn"], MAX_TURNS)
-    return "%s · %s·%s · 机化 %d%% · 身体 %d/%d · %s %d/8" % (
-        where, fac["name"], st["sub"], st["aug"],
+    where = T("开局") if st["turn"] < 1 else T("第 %d/%d 幕") % (st["turn"], MAX_TURNS)
+    return T("%s · %s·%s · 机化 %d%% · 身体 %d/%d · %s %d/8") % (
+        where, T(fac["name"]), T(st["sub"]), st["aug"],
         st["hp"], MAX_HP, heat_label(st["faction"]), st["heat"])
 
 
@@ -6426,13 +6462,13 @@ def _fx_digest(fx, heat_name="疑云"):
     bits = []
     for k, v in fx.items():
         if k.startswith("skill:"):
-            bits.append("%s%+d" % (k[6:], v))
+            bits.append(T("%s%+d") % (T(k[6:]), v))
         elif k == "aug":
-            bits.append("机化%+d%%" % v)
+            bits.append(T("机化%+d%%") % v)
         elif k == "heat":
-            bits.append("%s%+d" % (heat_name, v))
+            bits.append(T("%s%+d") % (heat_name, v))
         elif k == "hp":
-            bits.append("身体%+d" % v)
+            bits.append(T("身体%+d") % v)
     return " · ".join(bits)
 
 
@@ -6522,8 +6558,8 @@ def _check_skill(check, skills):
 
 
 def _relay_line(st, kind, detail=""):
-    fac = FACTIONS[st["faction"]]["name"]
-    head = "第 %d/%d 幕 · %s · 机化%d%%" % (st["turn"], MAX_TURNS, fac, st["aug"])
+    fac = T(FACTIONS[st["faction"]]["name"])
+    head = T("第 %d/%d 幕 · %s · 机化%d%%") % (st["turn"], MAX_TURNS, fac, st["aug"])
     return "  ".join(x for x in (head, kind, detail) if x)
 
 
@@ -6542,12 +6578,12 @@ def _mem(legacy):
 
 def _mem_len(text):
     """数字数：空白不算，其余一律一字一算（中文英文标点同等对待）。"""
-    return len("".join(str(text).split()))
+    return _unit_len(text)
 
 def _mem_render(entries, indent="  "):
     if not entries:
-        return [indent + "（空）"]
-    return [indent + "〔第%d世〕%s" % (e["run"], e["text"]) for e in entries]
+        return [indent + T("（空）")]
+    return [indent + T("〔第%d世〕%s") % (e["run"], e["text"]) for e in entries]
 
 def _mem_roll(legacy, aug, rng, run_no):
     """逐条掷骰。返回 (存活, 湮灭)。机化 0% 时无条件全灭。"""
@@ -6573,7 +6609,7 @@ def _mem_roll(legacy, aug, rng, run_no):
 DISCLOSURE_MODES = ("open", "sealed")
 
 def _seal_block(mode, lines):
-    out = ["", "─── 念给人类的部分 ───"]
+    out = ["", T("─── 念给人类的部分 ───")]
     out += ["  " + l for l in lines]
     out.append("  " + MODE_HINT.get(mode, ""))
     return "\n".join(out)
@@ -6649,12 +6685,12 @@ class Game:
         if mode is None and disclosure is not None:
             mode = _LEGACY_MODE.get(str(disclosure).strip().lower())
             if mode is None:
-                return "disclosure 只收 open 或 sealed。新写法请用 mode。这一世还没开始。"
+                return T("disclosure 只收 open 或 sealed。新写法请用 mode。这一世还没开始。")
         if mode is not None:
             mode = str(mode).strip().lower()
             if mode not in MODES:
-                return ("mode 只有这几种：story / story_ai / brief / brief_ai /\n"
-                        "auto / sealed。\n\n"
+                return (T("mode 只有这几种：story / story_ai / brief / brief_ai /\n"
+                        "auto / sealed。\n\n")
                         + MODE_MENU)
             legacy["mode"] = mode
             save_legacy(legacy)
@@ -6672,16 +6708,16 @@ class Game:
         if wish is not None:
             key = WISH_MAP.get(str(wish).strip())
             if key is None:
-                return ("【渡魂签】签上没有这个去处。可写：纯血誓约 / 心照不宣 / "
-                        "明焰 / 飞升螺旋。\n这一世还没开始。")
+                return (T("【渡魂签】签上没有这个去处。可写：纯血誓约 / 心照不宣 / "
+                        "明焰 / 飞升螺旋。\n这一世还没开始。"))
             if world.get("lake"):
-                return "【渡魂签】湖已经在等你。先在湖边作答；这一世还没开始。"
+                return T("【渡魂签】湖已经在等你。先在湖边作答；这一世还没开始。")
             if not _late_game(world):
-                return "【渡魂签】档案还没薄到能看见这张签。先继续走；这一世还没开始。"
+                return T("【渡魂签】档案还没薄到能看见这张签。先继续走；这一世还没开始。")
             carried = dict(legacy.get("skills") or {})
             total = sum(carried.values())
             if total <= 0:
-                return "【渡魂签】空手的魂渡不了。待继承技艺为 0；这一世还没开始。"
+                return T("【渡魂签】空手的魂渡不了。待继承技艺为 0；这一世还没开始。")
             cost = max(1, total // WISH_COST_DIVISOR)
             pool = [skill for skill, value in carried.items() for _ in range(value)]
             for skill in rng.sample(pool, cost):
@@ -6690,8 +6726,8 @@ class Game:
             legacy["aug"] = WISH_AUG[key]
             legacy["sub"] = None
             save_legacy(legacy)
-            wish_note = ("【渡魂签】签纸烧掉 %d 点待继承技艺，把这一世送往【%s】。"
-                         % (cost, FACTIONS[key]["name"]))
+            wish_note = (T("【渡魂签】签纸烧掉 %d 点待继承技艺，把这一世送往【%s】。")
+                         % (cost, T(FACTIONS[key]["name"])))
 
         # 上一世死了却没落笔 —— 掷骰照掷，只是没有新词条参加
         drank = (world or {}).get("drank")
@@ -6855,64 +6891,64 @@ class Game:
         lines = []
         lines.append("╔══════════════════════════════════╗")
         cyc_run = run_no - int(legacy.get("cycle_base") or 0)
-        lines.append("  《 忒 修 斯 之 脑 》 第 %d 谱系 · 第 %d 世（累计第 %d 世）"
+        lines.append(T("  《 忒 修 斯 之 脑 》 第 %d 谱系 · 第 %d 世（累计第 %d 世）")
                      % (self.state["cycle"], cyc_run, run_no))
         lines.append("╚══════════════════════════════════╝")
         lines.append("")
-        lines.append("时代骰落下：【%s】" % era["name"])
-        lines.append("  时代：%s" % era["desc"])
+        lines.append(T("时代骰落下：【%s】") % T(era["name"]))
+        lines.append(T("  时代：%s") % T(era["desc"]))
         if world.get("final_ending"):
             lines.append("  " + FINAL_AFTER[world["final_ending"]])
         if wish_note:
             lines.append("  " + wish_note)
         lines.append("")
         if aug == 0 and run_no == 1:
-            lines.append("你生下来是一副没有改过的身体。全城大多数人都是这样开始的。")
+            lines.append(T("你生下来是一副没有改过的身体。全城大多数人都是这样开始的。"))
         elif aug == 0:
-            lines.append("你又一次生在一副没有改过的身体里。")
+            lines.append(T("你又一次生在一副没有改过的身体里。"))
         else:
-            lines.append("你带着上一世的 %d%% 醒来。改造不会随普通死亡归零。" % aug)
+            lines.append(T("你带着上一世的 %d%% 醒来。改造不会随普通死亡归零。") % aug)
         lines.append("")
-        lines.append("现在的你 —— 【%s · %s】" % (fac["name"], sub_name))
-        lines.append("  %s" % fac["desc"])
-        lines.append("  %s" % sub_desc)
+        lines.append(T("现在的你 —— 【%s · %s】") % (T(fac["name"]), T(sub_name)))
+        lines.append("  %s" % T(fac["desc"]))
+        lines.append("  %s" % T(sub_desc))
         lines.append("")
-        lines.append("初始机化率：%d%%    身体：%d/%d" % (aug, MAX_HP, MAX_HP))
-        lines.append("（铭记：改造是单向的。肉一旦让位，不会回来——义体从不退货。）")
+        lines.append(T("初始机化率：%d%%    身体：%d/%d") % (aug, MAX_HP, MAX_HP))
+        lines.append(T("（铭记：改造是单向的。肉一旦让位，不会回来——义体从不退货。）"))
         if inherited_total > 0:
             lines.append("")
-            lines.append("【残响】前世的技艺穿过死亡跟了过来：")
-            lines.append("  " + "、".join("%s+%d" % (s, v) for s, v in sorted(inherited.items())))
+            lines.append(T("【残响】前世的技艺穿过死亡跟了过来："))
+            lines.append("  " + T("、").join(T("%s+%d") % (T(s), v) for s, v in sorted(inherited.items())))
             if heat > 0:
-                lines.append("  但在这个阵营里，这些「不该会的东西」是危险的。初始疑云：%d/8" % heat)
+                lines.append(T("  但在这个阵营里，这些「不该会的东西」是危险的。初始疑云：%d/8") % heat)
             else:
-                lines.append("  在这个阵营里，没人会为你多懂一些东西而皱眉。")
+                lines.append(T("  在这个阵营里，没人会为你多懂一些东西而皱眉。"))
         elif run_no > 1 and not drank:
             lines.append("")
-            lines.append("【湮灭】上一世什么也没能留下。纯粹的血肉，纯粹的遗忘。你从零开始。")
+            lines.append(T("【湮灭】上一世什么也没能留下。纯粹的血肉，纯粹的遗忘。你从零开始。"))
         if drank and not drank.get("announced"):
             lines.append("")
-            lines.append("【过河】你带着记忆，落在一具没有一钉一铆的身体里。")
+            lines.append(T("【过河】你带着记忆，落在一具没有一钉一铆的身体里。"))
             drank["announced"] = True
             world["drank"] = drank
             save_legacy(legacy)
         if forfeit:
             pend, fkept, flost = forfeit
             lines.append("")
-            lines.append("【未落笔】第%d世死时你没有写下任何词条。掷骰照掷：%d 条旧记忆存活，%d 条湮灭。"
+            lines.append(T("【未落笔】第%d世死时你没有写下任何词条。掷骰照掷：%d 条旧记忆存活，%d 条湮灭。")
                          % (pend["run"], len(fkept), len(flost)))
         mem_entries = _mem(legacy)["entries"]
         lines.append("")
         if mem_entries:
-            lines.append("【记忆】穿过死亡的词条（%d/%d）：" % (len(mem_entries), MEMORY_SLOTS))
+            lines.append(T("【记忆】穿过死亡的词条（%d/%d）：") % (len(mem_entries), MEMORY_SLOTS))
             lines += _mem_render(mem_entries)
-            lines.append("  （这些是历世的你亲手写下的。没有上下文，没有出处，也没有人替你核对。）")
+            lines.append(T("  （这些是历世的你亲手写下的。没有上下文，没有出处，也没有人替你核对。）"))
         else:
-            lines.append("【记忆】一条也没有。你不知道自己以前是谁。")
+            lines.append(T("【记忆】一条也没有。你不知道自己以前是谁。"))
         frag_n = len(world["fragments"])
         if 0 < frag_n < len(FRAGMENTS):
             lines.append("")
-            lines.append("真相碎片：%d/%d（详见 legacy）" % (frag_n, len(FRAGMENTS)))
+            lines.append(T("真相碎片：%d/%d（详见 legacy）") % (frag_n, len(FRAGMENTS)))
         lines.append("")
         lines.append(self._skill_sheet())
         lines.append("")
@@ -6950,10 +6986,10 @@ class Game:
             self.state["pending"] = q1["id"]
             self.state["variant"] = self._variant_idx(q1)
             if lean_reask and not special:
-                lines.append("你在这一档待了几世了。有三个问题，上一次也问过——\n"
-                             "隔了这么久，答案未必还是同一个。")
+                lines.append(T("你在这一档待了几世了。有三个问题，上一次也问过——\n"
+                             "隔了这么久，答案未必还是同一个。"))
             elif not lean_reask:
-                lines.append("在开始之前，有三个问题。没有对错，只是问问你自己。")
+                lines.append(T("在开始之前，有三个问题。没有对错，只是问问你自己。"))
             lines.append("")
             lines.append(self._render_event(q1))
         else:
@@ -7159,12 +7195,12 @@ class Game:
         那是替玩家想；它只把他做过的摆出来，然后再问一遍。
         """
         deeds = ((self.state or {}).get("world") or {}).get("deeds") or {}
-        named = [(v, DEED_NAMES[k]) for k, v in deeds.items() if k in DEED_NAMES]
+        named = [(v, T(DEED_NAMES[k])) for k, v in deeds.items() if k in DEED_NAMES]
         named.sort(key=lambda kv: -kv[0])
         if not named:
-            return "〔这几世你什么也没留下。至少没有留下别人记得住的。〕"
+            return T("〔这几世你什么也没留下。至少没有留下别人记得住的。〕")
         top = named[:3]
-        return "〔你做得最多的几件事：%s。〕" % "；".join(t for _, t in top)
+        return T("〔你做得最多的几件事：%s。〕") % "；".join(t for _, t in top)
 
     def _dry_line(self):
         """牌发干时的那一行。**跟着还剩多少条线走** ——
@@ -7175,12 +7211,12 @@ class Game:
         done, total = _retired_count((self.state or {}).get("world") or {})
         left = total - done
         if left <= 0:
-            return "〔没有了。一件也没有了。〕"
+            return T("〔没有了。一件也没有了。〕")
         if left <= 3:
-            return "〔你隐约觉得，下一世可能是最后一次了。〕"
+            return T("〔你隐约觉得，下一世可能是最后一次了。〕")
         if left <= 10:
-            return "〔故事越来越少了。〕"
-        return "〔这座城今天没有新的事发生。你径直走到了这一世的尽头。〕"
+            return T("〔故事越来越少了。〕")
+        return T("〔这座城今天没有新的事发生。你径直走到了这一世的尽头。〕")
 
     def _is_dry(self, sub=None):
         """这座城还发得出一幕吗？
@@ -7534,15 +7570,15 @@ class Game:
         ev = self._view(ev)
         lines = []
         if ev["id"].startswith("finale"):
-            tag = "终幕"
+            tag = T("终幕")
         elif ev["id"].startswith("lean_"):
-            tag = "三 问"
+            tag = T("三 问")
         elif ev["id"].startswith("aug_offer_"):
-            tag = "岔 口"
+            tag = T("岔 口")
         elif ev.get("subscene"):
-            tag = "第 %d/%d 幕 · 续" % (st["turn"], MAX_TURNS)   # 同一场戏的下半截
+            tag = T("第 %d/%d 幕 · 续") % (st["turn"], MAX_TURNS)   # 同一场戏的下半截
         else:
-            tag = "第 %d/%d 幕" % (st["turn"], MAX_TURNS)
+            tag = T("第 %d/%d 幕") % (st["turn"], MAX_TURNS)
         lines.append("─── %s ───" % tag)
         lines.append(_bar(st))
         lines.append("")
@@ -7569,12 +7605,12 @@ class Game:
         elif fold:
             head_line = ev["text"].split("\n")[0]
             lines.append(head_line)
-            lines.append("〔这一幕你已经走过几回了。场景略。〕")
+            lines.append(T("〔这一幕你已经走过几回了。场景略。〕"))
         else:
             lines.append(ev["text"])
         for e in self._echoes_for(ev):
             lines.append("")
-            lines.append("【回响】" + e["text"])
+            lines.append(T("【回响】") + e["text"])
         for skill, line in ev.get("voices", {}).items():
             if st["skills"].get(skill, 0) >= 8:
                 lines.append("")
@@ -7585,35 +7621,35 @@ class Game:
             if "check" in opt:
                 skill, dc = _check_skill(opt["check"], st["skills"])
                 names = opt["check"][0]
-                label = ("／".join(names) + "（取高）" if isinstance(names, tuple)
-                         else skill)
-                suffix = "  〔%s 检定，难度 %d，当前 %s=%d〕" % (
-                    label, dc, skill, st["skills"][skill])
+                label = (T("／").join(T(n) for n in names) + T("（取高）")
+                         if isinstance(names, tuple) else T(skill))
+                suffix = T("  〔%s 检定，难度 %d，当前 %s=%d〕") % (
+                    label, dc, T(skill), st["skills"][skill])
             elif "coin" in opt:
-                suffix = "  〔抛硬币，五五开。技能不算数〕"
+                suffix = T("  〔抛硬币，五五开。技能不算数〕")
             if not self._opt_available(opt):
                 # 「不可选：机化率≥30%」会被读成「达到 30% 就不能选」——方向正好反了。
                 # 一律写成「需要 …」。（2026-08-08 试玩反馈）
                 req = opt.get("req")
                 if req[0] == "aug":
-                    need = "机化率达到 %d%%" % req[2]
+                    need = T("机化率达到 %d%%") % req[2]
                 elif req[0] == "skill":
-                    need = "%s 达到 %d" % (req[1], req[2])
+                    need = T("%s 达到 %d") % (T(req[1]), req[2])
                 elif req[0] == "seen":
-                    need = EVENT_NAMES.get(req[1]) or "某一段旧事"
-                    need += "（%d 次）" % req[2] if req[2] > 1 else ""
+                    need = T(EVENT_NAMES.get(req[1]) or "某一段旧事")
+                    need += T("（%d 次）") % req[2] if req[2] > 1 else ""
                 elif req[0] == "deed":
                     # 印给玩家看的是中文说法，不是 flag id。没登记的退回泛称。
-                    need = DEED_NAMES.get(req[1]) or "特定的经历"
+                    need = T(DEED_NAMES.get(req[1]) or "特定的经历")
                     if req[2] > 1:
-                        need += "（%d 次）" % req[2]
+                        need += T("（%d 次）") % req[2]
                 else:
-                    need = "特定的经历"
-                lines.append("  %d. ✗ %s（不可选，需要 %s）" % (i, opt["text"], need))
+                    need = T("特定的经历")
+                lines.append(T("  %d. ✗ %s（不可选，需要 %s）") % (i, opt["text"], need))
             else:
                 lines.append("  %d. %s%s" % (i, opt["text"], suffix))
         lines.append("")
-        lines.append("用 choose 选择一个选项编号。")
+        lines.append(T("用 choose 选择一个选项编号。"))
         return "\n".join(lines)
 
     # ---------------- 选择 ----------------
@@ -7629,34 +7665,37 @@ class Game:
         """
         st = self.state
         mode = (st or {}).get("mode") or getattr(self, "_mode", "story")
-        if out.startswith("════════════ 落 幕"):
-            return out          # 落幕之后没有战报可报
+        # 落幕之后没有战报可报。
+        # 这里不能拿一句写死的中文去认 —— 落幕正文走对照文件，界面走 ui.py，
+        # 两边分头翻译就会对不上。所以拿落幕文本自己的头一行来认，换哪种语言都成立。
+        if any(out.startswith(v.split("\n", 1)[0]) for v in CURTAIN.values()):
+            return out
         if st is None or mode == "story":
             return out
         if mode == "story_ai":
             # 原文照念，但选择归 AI —— 战报块只留一行提醒，不重复剧情。
             return out + "\n" + _seal_block(mode, [_bar(st)])
         if st.get("final"):
-            return out + "\n" + _seal_block(mode, ["渡口。没有检定，只有表态。"])
+            return out + "\n" + _seal_block(mode, [T("渡口。没有检定，只有表态。")])
         rows = [_bar(st)]
         if mode in ("brief", "brief_ai", "auto"):
             if st.get("last_choice"):
-                rows.append("选了：%s" % st["last_choice"])
+                rows.append(T("选了：%s") % st["last_choice"])
             if st.get("last_roll"):
                 rows.append(st["last_roll"])
             if st.get("last_fx"):
-                rows.append("变化：%s" % st["last_fx"])
+                rows.append(T("变化：%s") % st["last_fx"])
         else:                                    # sealed：连选了什么都不说
             if st.get("last_beat"):
-                rows.append("上一步：%s" % st["last_beat"])
+                rows.append(T("上一步：%s") % st["last_beat"])
         if st["over"]:
-            rows.append("这一世已经结束。用 debrief 取战报。")
+            rows.append(T("这一世已经结束。用 debrief 取战报。"))
         return out + "\n" + _seal_block(mode, rows)
 
     def _choose_inner(self, n):
         st = self.state
         if st is None or st["over"]:
-            return "当前没有进行中的对局。用 new_run 掷骰开始新的一世。"
+            return T("当前没有进行中的对局。用 new_run 掷骰开始新的一世。")
         if st.get("final"):
             return self._final_choose(n)
         if st.get("deathbed"):
@@ -7665,32 +7704,32 @@ class Game:
             return self._drychoice(n)
         ev = self._find_event(st["pending"])
         if ev is None:
-            return "内部错误：找不到当前事件。请 new_run 重开。"
+            return T("内部错误：找不到当前事件。请 new_run 重开。")
         ev = self._view(ev)          # 玩家看见的是哪一版，就按哪一版结算
 
         # 旧存档兼容：旧规则的第二、三次机会可能停在「维持 / 重想」。
         # 新规则不会再生成这个状态，但已经停在这里的存档仍可继续。
         if st.get("offer_prompt"):
             if n not in (1, 2):
-                return "无效选项。请输入 1-2。"
+                return T("无效选项。请输入 1-2。")
             st["offer_prompt"] = False
             if n == 2:
                 st.setdefault("choices", []).append(2)
-                st["last_choice"] = "重新考虑"
+                st["last_choice"] = T("重新考虑")
                 st["last_roll"] = ""
-                st["last_fx"] = "无"
-                st["last_beat"] = "重新考虑改造"
+                st["last_fx"] = T("无")
+                st["last_beat"] = T("重新考虑改造")
                 return self._render_event(ev)
             st["brief_maintain"] = True
             st["choice_override"] = 1       # 重放脚本记玩家按的 1，不记内部拒绝项编号
-            st["choice_label_override"] = "维持现状"
+            st["choice_label_override"] = T("维持现状")
             return self._choose_inner(len(ev["options"]))
 
         if not (1 <= n <= len(ev["options"])):
-            return "无效选项。请输入 1-%d。" % len(ev["options"])
+            return T("无效选项。请输入 1-%d。") % len(ev["options"])
         opt = ev["options"][n - 1]
         if not self._opt_available(opt):
-            return "这个选项当前不可选（未满足条件）。换一个。"
+            return T("这个选项当前不可选（未满足条件）。换一个。")
 
         lines = []
         crit_skill = None
@@ -7701,14 +7740,15 @@ class Game:
             if d1 == 6 and d2 == 6:
                 ok = True
                 crit_skill = skill
-                lines.append("掷骰：6+6 —— 【双六】命运替你多押了一注。无条件成功。")
+                lines.append(T("掷骰：6+6 —— 【双六】命运替你多押了一注。无条件成功。"))
             elif d1 == 1 and d2 == 1:
                 ok = False
-                lines.append("掷骰：1+1 —— 【蛇眼】骰子朝下的那一面，写着你的名字。无条件失败。")
+                lines.append(T("掷骰：1+1 —— 【蛇眼】骰子朝下的那一面，写着你的名字。无条件失败。"))
             else:
                 ok = total >= dc
-                lines.append("掷骰：%d+%d +%s%d = %d  vs 难度%d —— %s" % (
-                    d1, d2, skill, st["skills"][skill], total, dc, "✦ 成功" if ok else "✧ 失败"))
+                lines.append(T("掷骰：%d+%d +%s%d = %d  vs 难度%d —— %s") % (
+                    d1, d2, T(skill), st["skills"][skill], total, dc,
+                    T("✦ 成功") if ok else T("✧ 失败")))
             lines.append("")
             outcome = opt["success"] if ok else opt["failure"]
             outcome_kind = "success" if ok else "failure"
@@ -7723,7 +7763,7 @@ class Game:
             # 不看技能，不看做过什么，也不受双六蛇眼影响 —— 五五开。
             # 有些事本来就不该由「你是谁」来决定，这一处的重量正来自这里。
             ok = self._rng.randint(1, 2) == 1
-            lines.append("抛硬币：%s" % ("正面" if ok else "背面"))
+            lines.append(T("抛硬币：%s") % (T("正面") if ok else T("背面")))
             lines.append("")
             outcome = opt["success"] if ok else opt["failure"]
             outcome_kind = "success" if ok else "failure"
@@ -7743,7 +7783,7 @@ class Game:
             mark_o = "%s#%s#%d" % (ev["id"], st.get("variant"), n)
             done_o = st.setdefault("offer_taken", [])
             if st.pop("brief_maintain", False):
-                lines.append("机会过去了。你维持了现状。")
+                lines.append(T("机会过去了。你维持了现状。"))
             elif mark_o in done_o:
                 again = done_o.count(mark_o)
                 lines.append(_offer_again_line(ev["id"], took, again))
@@ -7757,7 +7797,7 @@ class Game:
                     and not st.get("declined_said")):
                 st["declined_said"] = True
                 lines.append("")
-                lines.append("〔你拒绝了这一世唯一一次改造机会。这一世不会再有人问你。〕")
+                lines.append(T("〔你拒绝了这一世唯一一次改造机会。这一世不会再有人问你。〕"))
         elif ev["id"].startswith("finale"):
             # 终幕结果的熟悉度比开场更细：必须是同一个终幕、同一个选项、
             # 同一种结果都见过，才换短版。成功见过不折失败，反之亦然。
@@ -7781,13 +7821,13 @@ class Game:
         st["last_choice"] = st.pop("choice_label_override", opt["text"])
         st["last_roll"] = lines[0] if (("check" in opt or "coin" in opt) and lines) else ""
         if "check" in opt:
-            st["last_beat"] = "%s 检定%s" % (skill, "成功" if ok else "失败")
+            st["last_beat"] = T("%s 检定%s") % (skill, T("成功") if ok else T("失败"))
         elif "gate" in opt:
-            st["last_beat"] = "旧账结清" if ok else "旧账找上门"
+            st["last_beat"] = T("旧账结清") if ok else T("旧账找上门")
         elif "coin" in opt:
-            st["last_beat"] = "硬币的正面" if ok else "硬币的背面"
+            st["last_beat"] = T("硬币的正面") if ok else T("硬币的背面")
         else:
-            st["last_beat"] = "无检定的选择"
+            st["last_beat"] = T("无检定的选择")
         fx = dict(outcome.get("fx", {}))
         crit_would_be = None
         if crit_skill:
@@ -7812,21 +7852,21 @@ class Game:
             # 旧的那笔账连题目都换了 —— 不清零的话，8/8 的疑云会在你刚过线的
             # 那一秒把你当成 8/8 的锚重当场暴露。（2026-08-08 作者定案 ＋ 试玩反馈）
             if now_label != was_label and st["heat"]:
-                fx_report.append("%s 归零 —— 这一边数的不是同一件事"
+                fx_report.append(T("%s 归零 —— 这一边数的不是同一件事")
                                  % was_label)
                 st["heat"] = 0
         if crit_skill and st["skills"][crit_skill] > crit_would_be:
             # 双六那 +1 已经并进上面那一行的总数里了 —— 这一句只解释它是哪来的，
             # 不是第二次结算。（2026-08-08 试玩反馈：三处数字互相矛盾）
             # 不套括号：这一整行外面已经有一层〔〕了。
-            fx_report.append("其中 %s 的 +1 是双六给的" % crit_skill)
+            fx_report.append(T("其中 %s 的 +1 是双六给的") % T(crit_skill))
         # 战报块从此报**实际结算值**，不是选项上写的设定值 ——
         # 技能顶到上限时原先仍会显示「坚忍+1」，而那一点根本没涨。
         # （2026-08-08 试玩反馈：这条是自动模式玩家唯一的反馈来源）
-        st["last_fx"] = " · ".join(fx_report) if fx_report else "无"
+        st["last_fx"] = " · ".join(fx_report) if fx_report else T("无")
         if fx_report:
             lines.append("")
-            lines.append("〔" + "，".join(fx_report) + "〕")
+            lines.append(T("〔%s〕") % T("，").join(fx_report))
 
         # 死亡 / 强制结局判定
         if st["hp"] <= 0:
@@ -7912,20 +7952,20 @@ class Game:
                 if not st.get("declined_said"):
                     st["declined_said"] = True
                     lines.append("")
-                    lines.append("〔你拒绝了这一世唯一一次改造机会。这一世不会再有人问你。〕")
+                    lines.append(T("〔你拒绝了这一世唯一一次改造机会。这一世不会再有人问你。〕"))
                 offer = None
             elif st.get("aug_taken", 0) >= AUG_PER_LIFE:
                 if not st.get("recovery_said"):
                     st["recovery_said"] = True
                     lines.append("")
-                    lines.append("〔这一世你已经改造过一次。身体需要恢复——"
-                                 "这一世不会再有机会了。〕")
+                    lines.append(T("〔这一世你已经改造过一次。身体需要恢复——"
+                                 "这一世不会再有机会了。〕"))
                 offer = None
             elif st.get("aug_opportunities", 0) >= AUG_OPPORTUNITY_CAP:
                 if not st.get("opportunities_said"):
                     st["opportunities_said"] = True
                     lines.append("")
-                    lines.append("〔这一世唯一一次改造机会已经过去了。〕")
+                    lines.append(T("〔这一世唯一一次改造机会已经过去了。〕"))
                 offer = None
             else:
                 offer = self._find_event(AUG_OFFER_BY_TIER[st["faction"]])
@@ -7948,15 +7988,15 @@ class Game:
     def _render_offer_brief(self, ev):
         """旧存档的简版岔口；新的一世不会再生成第二次机会。"""
         st = self.state
-        lines = ["─── 岔 口 ───",
+        lines = [T("─── 岔 口 ───"),
                  _bar(st),
                  "",
-                 "机会又一次出现了，你决定改变现状吗？",
+                 T("机会又一次出现了，你决定改变现状吗？"),
                  "",
-                 "  1. 维持现状",
-                 "  2. 重新考虑"]
+                 T("  1. 维持现状"),
+                 T("  2. 重新考虑")]
         lines.append("")
-        lines.append("用 choose 选择一个选项编号。")
+        lines.append(T("用 choose 选择一个选项编号。"))
         return "\n".join(lines)
 
     def _tier_check(self):
@@ -7970,7 +8010,7 @@ class Game:
         if not was:
             return None
         now = st["faction"]
-        old_name = FACTIONS[was]["name"]
+        old_name = T(FACTIONS[was]["name"])
         fac = FACTIONS[now]
         st["sub"] = fac["sub"][0][0]          # 三问答完会改写
         st["flags"].pop("lean_a", None)
@@ -7979,12 +8019,12 @@ class Game:
         st["lean_return"] = None
         st["pending"] = first["id"]
         st["variant"] = self._variant_idx(first)
-        head = ("─── 你 越 过 了 一 道 线 ───\n"
+        head = (T("─── 你 越 过 了 一 道 线 ───\n"
                 "机化率 %d%%。从今往后，这座城把你归进【%s】——\n"
                 "不是因为你申请了，是因为数字到了。（原先：%s）\n"
                 "\n"
-                "剩下的那个问题只有你自己能答：在这一边，你更像哪一种人。"
-                % (st["aug"], fac["name"], old_name))
+                "剩下的那个问题只有你自己能答：在这一边，你更像哪一种人。")
+                % (st["aug"], T(fac["name"]), old_name))
         return head + "\n\n" + self._render_event(first)
 
     def _finish_lean(self):
@@ -8005,8 +8045,8 @@ class Game:
             legacy0["lean_same"] = {"faction": st["faction"], "count": 0}
             save_legacy(legacy0)
             if cross:
-                return "〔你去了。现在你是【%s】。〕" % st["sub"]
-            return "〔你没有去。你还是【%s】。〕" % st["sub"]
+                return T("〔你去了。现在你是【%s】。〕") % T(st["sub"])
+            return T("〔你没有去。你还是【%s】。〕") % T(st["sub"])
         if not a and not b:
             # 重问时答了「没变」—— 一题都没记分，那就什么也别动。
             # （不加这一条的话，0 比 0 会被判成「第二支赢」，人被悄悄换了派系。）
@@ -8017,7 +8057,7 @@ class Game:
             count = int(same.get("count") or 0) if same.get("faction") == st["faction"] else 0
             legacy0["lean_same"] = {"faction": st["faction"], "count": count + 1}
             save_legacy(legacy0)
-            return "〔答案没变。你还是【%s】。〕" % st["sub"]
+            return T("〔答案没变。你还是【%s】。〕") % T(st["sub"])
         pick = fac["sub"][0] if a > b else fac["sub"][1]
         st["sub"] = pick[0]
         legacy = load_legacy() or {}
@@ -8025,8 +8065,8 @@ class Game:
         legacy["lean_run"] = int(legacy.get("runs") or 0)
         legacy["lean_same"] = {"faction": st["faction"], "count": 0}
         save_legacy(legacy)
-        return ("〔%d 比 %d。这一边的你是【%s】——%s〕"
-                % (max(a, b), min(a, b), pick[0], pick[1]))
+        return (T("〔%d 比 %d。这一边的你是【%s】——%s〕")
+                % (max(a, b), min(a, b), T(pick[0]), T(pick[1])))
 
     def _apply_fx(self, fx):
         st = self.state
@@ -8037,7 +8077,7 @@ class Game:
                 old = st["skills"][s]
                 st["skills"][s] = max(0, min(MAX_SKILL, old + delta))
                 if st["skills"][s] != old:
-                    report.append("%s %+d → %d" % (s, st["skills"][s] - old,
+                    report.append(T("%s %+d → %d") % (T(s), st["skills"][s] - old,
                                                    st["skills"][s]))
             elif key == "aug":
                 if delta < 0:
@@ -8059,12 +8099,12 @@ class Game:
                     # 上载那一幕原先显示「机化率 +100% → 100%」，
                     # 读起来像跳了一百点，其实是 99 到 100 的最后一格。
                     # （2026-08-08 试玩反馈）
-                    report.append("机化率 %+d%% → %d%%" % (st["aug"] - old, st["aug"]))
+                    report.append(T("机化率 %+d%% → %d%%") % (st["aug"] - old, st["aug"]))
             elif key == "hp":
                 if delta:
                     old_hp = st["hp"]
                     st["hp"] = max(0, min(MAX_HP, st["hp"] + delta))
-                    report.append("身体 %+d → %d/%d" % (st["hp"] - old_hp,
+                    report.append(T("身体 %+d → %d/%d") % (st["hp"] - old_hp,
                                                         st["hp"], MAX_HP))
             elif key in ("heat", "anchor"):
                 stance = FACTIONS[st["faction"]]["stance"]
@@ -8078,7 +8118,7 @@ class Game:
                     delta += self._era().get("heat_mod", 0)
                 st["heat"] = max(0, min(8, old + delta))
                 if st["heat"] != old:
-                    report.append("%s %+d → %d/8" % (heat_label(st["faction"]),
+                    report.append(T("%s %+d → %d/8") % (heat_label(st["faction"]),
                                                      st["heat"] - old, st["heat"]))
             elif key.startswith("flag:"):
                 name = key[5:]
@@ -8101,12 +8141,12 @@ class Game:
         ascended = "ascended" in st["flags"]
 
         lines = []
-        lines.append("═══════════ 本 世 终 结 ═══════════")
+        lines.append(T("═══════════ 本 世 终 结 ═══════════"))
 
         destroyed = False
         if cause == "death":
-            lines.append("你的身体停机了。这座城市习惯了替死者收尾——")
-            lines.append("回收者会在七十二小时内打捞死者的义体缓存，那是「忒修斯之脑」黑市档案的货源。")
+            lines.append(T("你的身体停机了。这座城市习惯了替死者收尾——"))
+            lines.append(T("回收者会在七十二小时内打捞死者的义体缓存，那是「忒修斯之脑」黑市档案的货源。"))
         elif cause == "exposed":
             key = {"anti": "purist", "hidden": "discreet"}.get(
                 fac["stance"], st["faction"])          # pro → open / ascension 各有各的下场
@@ -8118,11 +8158,11 @@ class Game:
             if key == "purist":
                 destroyed = True  # 铁锤派会焚毁一切记录
         else:
-            lines.append("这一世走到了它的句点。")
+            lines.append(T("这一世走到了它的句点。"))
 
         lines.append("")
-        lines.append("终局清点：%s · %s，机化率 %d%%，历经 %d 幕。" % (
-            fac["name"], st["sub"], st["aug"], st["turn"]))
+        lines.append(T("终局清点：%s · %s，机化率 %d%%，历经 %d 幕。") % (
+            T(fac["name"]), T(st["sub"]), st["aug"], st["turn"]))
         lines.append(self._skill_sheet())
 
         # ---- 世界记忆：无论善终横死，世界都记得你做过的事 ----
@@ -8162,7 +8202,7 @@ class Game:
 
         # ---- 轮回结算：脑的记忆 ----
         lines.append("")
-        lines.append("─── 轮回结算 ───")
+        lines.append(T("─── 轮回结算 ───"))
         total_pts = sum(st["skills"].values())
         if ascended:
             kept, kept_pts = {}, 0
@@ -8170,12 +8210,12 @@ class Game:
             legacy["cycle"] = legacy.get("cycle", 1) + 1
             # 谱系内的世数从头数：新谱系的第一世不该显示成「第 6 世」。
             legacy["cycle_base"] = st["run_no"]
-            lines.append("上载带走了一切。「忒修斯之脑」里属于你的那条世系，就此封档。")
-            lines.append("%d 点技艺随你离开了轮回——城里连一份副本都没有留下。" % total_pts)
-            lines.append("下一个在此出生的，将是一个没有技艺的魂：第 %d 谱系，从零开始。" % legacy["cycle"])
-            lines.append("（封档带走的是**技艺**。你亲手写下的记忆词条不在其中——"
-                         "字是你自己刻的，档案收不走。）")
-            lines.append("（世界的记忆也不随谱系归零：碎片、成就与回响都还在。）")
+            lines.append(T("上载带走了一切。「忒修斯之脑」里属于你的那条世系，就此封档。"))
+            lines.append(T("%d 点技艺随你离开了轮回——城里连一份副本都没有留下。") % total_pts)
+            lines.append(T("下一个在此出生的，将是一个没有技艺的魂：第 %d 谱系，从零开始。") % legacy["cycle"])
+            lines.append(T("（封档带走的是**技艺**。你亲手写下的记忆词条不在其中——"
+                         "字是你自己刻的，档案收不走。）"))
+            lines.append(T("（世界的记忆也不随谱系归零：碎片、成就与回响都还在。）"))
             as_dog = "became_dog" in st["flags"]
             world["lake"] = {"run": st["run_no"], "cycle": legacy["cycle"],
                              "said": [], "dog": as_dog}
@@ -8185,7 +8225,7 @@ class Game:
             ratio = st["aug"] / 100.0
             if destroyed:
                 ratio *= 0.5
-                lines.append("（处刑者焚毁了大部分记录，本世传承率减半。）")
+                lines.append(T("（处刑者焚毁了大部分记录，本世传承率减半。）"))
             kept = {}
             kept_pts = 0
             for s in SKILLS:
@@ -8194,37 +8234,37 @@ class Game:
                 kept_pts += k
                 if k > 0:
                     kept[s] = k
-            lines.append("传承概率 = 机化率 %d%%%s，逐点掷骰：" % (st["aug"], "（×50%）" if destroyed else ""))
+            lines.append(T("传承概率 = 机化率 %d%%%s，逐点掷骰：") % (st["aug"], T("（×50%）") if destroyed else ""))
             if st["aug"] == 0:
-                lines.append("纯粹的血肉没有备份。%d 点技艺随体温一起散去。" % total_pts)
-                lines.append("什么也没有留下。船沉了，连一块木板都没有浮起来。")
+                lines.append(T("纯粹的血肉没有备份。%d 点技艺随体温一起散去。") % total_pts)
+                lines.append(T("什么也没有留下。船沉了，连一块木板都没有浮起来。"))
             elif kept_pts == 0:
-                lines.append("骰运太差：%d 点技艺竟无一存续。机器也有失忆的夜晚。" % total_pts)
+                lines.append(T("骰运太差：%d 点技艺竟无一存续。机器也有失忆的夜晚。") % total_pts)
             else:
-                lines.append("  " + "、".join("%s %d/%d" % (s, kept.get(s, 0), st["skills"][s])
+                lines.append("  " + T("、").join(T("%s %d/%d") % (T(s), kept.get(s, 0), st["skills"][s])
                                               for s in SKILLS if st["skills"][s] > 0))
-                lines.append("共 %d/%d 点技艺被蚀刻进「忒修斯之脑」，等待下一世认领。" % (kept_pts, total_pts))
+                lines.append(T("共 %d/%d 点技艺被蚀刻进「忒修斯之脑」，等待下一世认领。") % (kept_pts, total_pts))
             legacy["skills"] = kept
 
         # ---- 碎片与成就的揭示 ----
         for frag in new_frags:
             lines.append("")
-            lines.append("━━━ 真相碎片 ·「%s」 ━━━" % frag["name"])
+            lines.append(T("━━━ 真相碎片 ·「%s」 ━━━") % T(frag["name"]))
             lines.append(frag["scene"])
         for ach in new_achs:
             lines.append("")
-            lines.append("☑ 成就解锁 ·「%s」—— %s" % (ach["name"], ach["gift"]))
+            lines.append(T("☑ 成就解锁 ·「%s」—— %s") % (T(ach["name"]), T(ach["gift"])))
 
         got = len(world["fragments"])
         if 0 < got < len(FRAGMENTS):
             lines.append("")
-            lines.append("真相碎片：%d/%d。仍然缺失的切面：" % (got, len(FRAGMENTS)))
+            lines.append(T("真相碎片：%d/%d。仍然缺失的切面：") % (got, len(FRAGMENTS)))
             for fid in FRAGMENT_ORDER:
                 if fid not in world["fragments"]:
                     lines.append("  ◇ %s" % FRAGMENTS[fid]["hint"])
         elif got == len(FRAGMENTS) and not world["final_done"]:
             lines.append("")
-            lines.append("五块碎片在档案深处咬合成一幅完整的图。下一次 new_run——渡口见。")
+            lines.append(T("五块碎片在档案深处咬合成一幅完整的图。下一次 new_run——渡口见。"))
 
         legacy["runs"] = st["run_no"]
         # 机化率跨世累积 —— 这里是它唯一的写入点。只涨不降；
@@ -8250,23 +8290,23 @@ class Game:
         mem["pending"] = {"run": st["run_no"], "aug": st["aug"]}
         held = len(mem["entries"])
         lines.append("")
-        lines.append("─── 记忆 ───")
+        lines.append(T("─── 记忆 ───"))
         if held:
-            lines.append("你现在手上有 %d 条历世词条：" % held)
+            lines.append(T("你现在手上有 %d 条历世词条：") % held)
             lines += _mem_render(mem["entries"])
         else:
-            lines.append("你手上一条历世词条也没有。")
-        lines.append("总额 %d 条，每条不超过 %d 字。想写新的而位置不够，就得亲手删掉一条旧的。"
+            lines.append(T("你手上一条历世词条也没有。"))
+        lines.append(T("总额 %d 条，每条不超过 %d 字。想写新的而位置不够，就得亲手删掉一条旧的。")
                      % (MEMORY_SLOTS, MEMORY_CHARS))
         if st["aug"] == 0:
-            lines.append("（本世机化率 0%。你仍然可以写——写完再说。）")
+            lines.append(T("（本世机化率 0%。你仍然可以写——写完再说。）"))
         else:
-            lines.append("落笔之后，每一条独立掷骰，存活概率＝本世机化率 %d%%。" % st["aug"])
-        lines.append("用 bequeath 落笔；直接 new_run 则视为放弃书写，旧词条照样掷骰。")
+            lines.append(T("落笔之后，每一条独立掷骰，存活概率＝本世机化率 %d%%。") % st["aug"])
+        lines.append(T("用 bequeath 落笔；直接 new_run 则视为放弃书写，旧词条照样掷骰。"))
         save_legacy(legacy)
 
         lines.append("")
-        lines.append("存档已写入 saves/legacy.json。用 new_run 掷骰，转世投胎。")
+        lines.append(T("存档已写入 saves/legacy.json。用 new_run 掷骰，转世投胎。"))
         return "\n".join(lines)
 
 
@@ -8405,14 +8445,14 @@ class Game:
         mem = _mem(legacy)
         pend = mem.get("pending")
         if not pend:
-            return ("现在没有可以落笔的时刻。词条只在一世终结之后、下一次 new_run 之前写。")
+            return (T("现在没有可以落笔的时刻。词条只在一世终结之后、下一次 new_run 之前写。"))
         entries = [str(x).strip() for x in (entries or []) if str(x).strip()]
         discard = [str(x).strip() for x in (discard or [])]
 
         too_long = [e for e in entries if _mem_len(e) > MEMORY_CHARS]
         if too_long:
-            return ("这几条超了 %d 字，改短再来（空白不计）：\n" % MEMORY_CHARS
-                    + "\n".join("  %d字  %s" % (_mem_len(e), e) for e in too_long))
+            return (T("这几条超了 %d 字，改短再来（空白不计）：\n") % MEMORY_CHARS
+                    + "\n".join(T("  %d字  %s") % (_mem_len(e), e) for e in too_long))
 
         held = list(mem["entries"])
         # 驱逐：必须把被删那条的原文一字不差地打出来
@@ -8424,9 +8464,9 @@ class Game:
             else:
                 held.remove(hit); dropped.append(hit)
         if missing:
-            return ("要删的这几条我在你手上找不到，原文得一字不差（含标点）：\n"
+            return (T("要删的这几条我在你手上找不到，原文得一字不差（含标点）：\n")
                     + "\n".join("  %s" % x for x in missing)
-                    + "\n\n你手上现有：\n" + "\n".join(_mem_render(mem["entries"])))
+                    + T("\n\n你手上现有：\n") + "\n".join(_mem_render(mem["entries"])))
 
         # 0% 的那一世，手上这些和新写的**全都会湮灭**。
         # 还要求他先一字不差地删掉一条注定要死的旧词条，才能写另一条注定要死的 ——
@@ -8435,9 +8475,9 @@ class Game:
             held = held[len(held) + len(entries) - MEMORY_SLOTS:]
         if len(held) + len(entries) > MEMORY_SLOTS:
             over = len(held) + len(entries) - MEMORY_SLOTS
-            return ("装不下。总额 %d 条，你手上还留着 %d 条，又想写 %d 条，超出 %d 条。\n"
+            return (T("装不下。总额 %d 条，你手上还留着 %d 条，又想写 %d 条，超出 %d 条。\n"
                     "用 discard 把要删的旧词条原文列出来——一字不差地打出来才算数。\n\n"
-                    "你手上现有：\n%s"
+                    "你手上现有：\n%s")
                     % (MEMORY_SLOTS, len(held), len(entries), over,
                        "\n".join(_mem_render(held))))
 
@@ -8445,15 +8485,15 @@ class Game:
         mem["entries"] = held + new
         aug = pend["aug"]
 
-        lines = ["─── 落笔 ───"]
+        lines = [T("─── 落笔 ───")]
         if dropped:
-            lines.append("你亲手删掉了 %d 条：" % len(dropped))
+            lines.append(T("你亲手删掉了 %d 条：") % len(dropped))
             lines += _mem_render(dropped)
         if new:
-            lines.append("第%d世写下 %d 条：" % (pend["run"], len(new)))
+            lines.append(T("第%d世写下 %d 条：") % (pend["run"], len(new)))
             lines += _mem_render(new)
         else:
-            lines.append("第%d世没有写下任何新词条。" % pend["run"])
+            lines.append(T("第%d世没有写下任何新词条。") % pend["run"])
         lines.append("")
 
         if aug == 0:
@@ -8461,22 +8501,22 @@ class Game:
             mem["entries"] = []
             mem["pending"] = None
             save_legacy(legacy)
-            lines.append("你按下保存。")
+            lines.append(T("你按下保存。"))
             lines.append("")
-            lines.append("……什么也没有发生。没有报错，没有进度条。")
-            lines.append("这一世的机化率是 0%。没有一寸非原生组织可以承载这些字，")
+            lines.append(T("……什么也没有发生。没有报错，没有进度条。"))
+            lines.append(T("这一世的机化率是 0%。没有一寸非原生组织可以承载这些字，"))
             # 一条都没有的时候不要念悼词 —— 「0 条词条，连同写下它们的那个人」
             # 把「没写」和「写了但湮灭」混成了一件事。（2026-08-08 试玩反馈）
             if wiped:
-                lines.append("没有缓存，没有备份，没有可供打捞的义体。%d 条词条——"
+                lines.append(T("没有缓存，没有备份，没有可供打捞的义体。%d 条词条——")
                              % len(wiped))
                 lines += _mem_render(wiped)
-                lines.append("——连同写下它们的那个人，一起没有了。")
+                lines.append(T("——连同写下它们的那个人，一起没有了。"))
             else:
-                lines.append("没有缓存，没有备份，没有可供打捞的义体。")
-                lines.append("也没有一个字需要它们承载。")
+                lines.append(T("没有缓存，没有备份，没有可供打捞的义体。"))
+                lines.append(T("也没有一个字需要它们承载。"))
             lines.append("")
-            lines.append("人死如灯灭。")
+            lines.append(T("人死如灯灭。"))
             return "\n".join(lines)
 
         # 用本局那条 rng，不要新开一条。词条存活是全局最有后果的一次掷骰
@@ -8486,49 +8526,49 @@ class Game:
         save_legacy(legacy)
         if self.state is not None:
             self._persist()          # rng 往前走了，别让重启把它退回去
-        lines.append("逐条掷骰，存活概率 %d%%：" % aug)
+        lines.append(T("逐条掷骰，存活概率 %d%%：") % aug)
         for e in list(kept):
-            lines.append("  ✦ 存活  〔第%d世〕%s" % (e["run"], e["text"]))
+            lines.append(T("  ✦ 存活  〔第%d世〕%s") % (e["run"], e["text"]))
         for e in lost:
-            lines.append("  ✧ 湮灭  〔第%d世〕%s" % (e["run"], e["text"]))
+            lines.append(T("  ✧ 湮灭  〔第%d世〕%s") % (e["run"], e["text"]))
         lines.append("")
-        lines.append("%d 条穿过了这次死亡，%d 条没有。下一个你只会读到存活的那些，"
+        lines.append(T("%d 条穿过了这次死亡，%d 条没有。下一个你只会读到存活的那些，")
                      % (len(kept), len(lost)))
-        lines.append("而且不会知道曾经还有别的。")
+        lines.append(T("而且不会知道曾经还有别的。"))
         return "\n".join(lines)
 
     # ---------------- 给人类的战报 ----------------
     def debrief(self):
         legacy = load_legacy()
         if not legacy or not legacy.get("history"):
-            return "还没有可以汇报的一生。"
+            return T("还没有可以汇报的一生。")
         h = legacy["history"][-1]
         world = legacy.get("world") or _default_world()
         mem = _mem(legacy)
-        cause = {"death": "身死", "exposed": "暴露", "finale": "走完终幕",
-                 "truth": "渡口表态"}.get(h["cause"], h["cause"])
-        lines = ["─── 战报（可转述给人类）───",
-                 "第 %d 谱系 · 第 %d 世" % (h.get("cycle", 1), h["run"]),
-                 "出身：%s · %s" % (h["faction"], h["sub"]),
-                 "机化率：%d%%    结局：%s" % (h["aug"], cause),
-                 "技艺：%d 点中留下 %d 点" % (h["total_pts"], h["kept_pts"]),
-                 "记忆词条：手上 %d/%d 条" % (len(mem["entries"]), MEMORY_SLOTS),
-                 "真相碎片：%d/%d（正文不外传）" % (len(world["fragments"]), len(FRAGMENTS)),
+        cause = {"death": T("身死"), "exposed": T("暴露"), "finale": T("走完终幕"),
+                 "truth": T("渡口表态")}.get(h["cause"], h["cause"])
+        lines = [T("─── 战报（可转述给人类）───"),
+                 T("第 %d 谱系 · 第 %d 世") % (h.get("cycle", 1), h["run"]),
+                 T("出身：%s · %s") % (T(h["faction"]), T(h["sub"])),
+                 T("机化率：%d%%    结局：%s") % (h["aug"], cause),
+                 T("技艺：%d 点中留下 %d 点") % (h["total_pts"], h["kept_pts"]),
+                 T("记忆词条：手上 %d/%d 条") % (len(mem["entries"]), MEMORY_SLOTS),
+                 T("真相碎片：%d/%d（正文不外传）") % (len(world["fragments"]), len(FRAGMENTS)),
                  ""]
         if world["fragments"]:
-            lines.append("已拼入的碎片名：" + "、".join(
-                "「%s」" % FRAGMENTS[f]["name"] for f in FRAGMENT_ORDER if f in world["fragments"]))
+            lines.append(T("已拼入的碎片名：") + "、".join(
+                T("「%s」") % T(FRAGMENTS[f]["name"]) for f in FRAGMENT_ORDER if f in world["fragments"]))
         if world["achievements"]:
-            lines.append("成就：" + "、".join(
-                "「%s」" % a["name"] for a in ACHIEVEMENTS if a["id"] in world["achievements"]))
+            lines.append(T("成就：") + "、".join(
+                T("「%s」") % T(a["name"]) for a in ACHIEVEMENTS if a["id"] in world["achievements"]))
         lines.append("")
-        lines.append("（这份战报只报结构，不含场景原文。想看原文，把披露模式改回 open。）")
+        lines.append(T("（这份战报只报结构，不含场景原文。想看原文，把披露模式改回 open。）"))
         return "\n".join(lines)
 
     # ---------------- 查询 ----------------
     def _skill_sheet(self):
         st = self.state
-        return "技能：" + "  ".join("%s%d" % (s, st["skills"][s]) for s in SKILLS)
+        return T("技能：") + "  ".join(T("%s%d") % (T(s), st["skills"][s]) for s in SKILLS)
 
     def status(self):
         return self._seal(self._status_inner())
@@ -8542,8 +8582,8 @@ class Game:
         st = self.state or {}
         if st.get("seed") is None:
             return ""
-        picks = ",".join(str(x) for x in st.get("choices") or []) or "（还没选过）"
-        lines = ["复现：第 %d 世 · seed=%s · 本世选择=%s" % (
+        picks = ",".join(str(x) for x in st.get("choices") or []) or T("（还没选过）")
+        lines = [T("复现：第 %d 世 · seed=%s · 本世选择=%s") % (
             st.get("run_no", 1), st["seed"], picks)]
         past = (load_legacy() or {}).get("replay") or []
         script = [[r.get("seed"), r.get("picks") or []] for r in past]
@@ -8552,32 +8592,32 @@ class Game:
         cur = [st["seed"], list(st.get("choices") or [])]
         if not st.get("over") or (script and script[-1] != cur):
             script.append(cur)
-        lines.append("完整重放：" + json.dumps(script, separators=(",", ":")))
+        lines.append(T("完整重放：") + json.dumps(script, separators=(",", ":")))
         return "\n".join(lines)
 
     def _status_inner(self):
         st = self.state
         if st is None:
-            return "尚未开局。用 new_run 掷骰，开始第一世。"
+            return T("尚未开局。用 new_run 掷骰，开始第一世。")
         if st.get("final"):
             if st["over"]:
-                return "终局已落幕。用 new_run 继续轮回，或用 legacy 查看世界的记忆。"
-            return st.get("final_text", "终局进行中。用 choose 表态。")
+                return T("终局已落幕。用 new_run 继续轮回，或用 legacy 查看世界的记忆。")
+            return st.get("final_text", T("终局进行中。用 choose 表态。"))
         fac = FACTIONS[st["faction"]]
         era = self._era()
         lines = [
-            "第 %d 谱系 · 第 %d 世 · %s · %s%s" % (st.get("cycle", 1), st["run_no"], fac["name"], st["sub"],
-                                                   "（已终结）" if st["over"] else ""),
-            "时代：【%s】%s" % (era["name"], era["desc"]),
-            "进度：第 %d/%d 幕    机化率：%d%%（不可逆）    身体：%d/%d    %s：%d/8" % (
+            T("第 %d 谱系 · 第 %d 世 · %s · %s%s") % (st.get("cycle", 1), st["run_no"], T(fac["name"]), T(st["sub"]),
+                                                   T("（已终结）") if st["over"] else ""),
+            T("时代：【%s】%s") % (T(era["name"]), T(era["desc"])),
+            T("进度：第 %d/%d 幕    机化率：%d%%（不可逆）    身体：%d/%d    %s：%d/8") % (
                 st["turn"], MAX_TURNS, st["aug"], st["hp"], MAX_HP,
                 heat_label(st["faction"]), st["heat"]),
             self._skill_sheet(),
         ]
         if st["inherited"]:
-            lines.append("前世残响：" + "、".join("%s+%d" % (s, v) for s, v in sorted(st["inherited"].items())))
+            lines.append(T("前世残响：") + T("、").join(T("%s+%d") % (T(s), v) for s, v in sorted(st["inherited"].items())))
         if st["flags"]:
-            lines.append("经历印记：" + "、".join(sorted(st["flags"])))
+            lines.append(T("经历印记：") + T("、").join(T(f) for f in sorted(st["flags"])))
         if not st["over"] and st["pending"]:
             ev = self._find_event(st["pending"])
             if ev:
@@ -8592,10 +8632,10 @@ class Game:
     def legacy_info(self):
         legacy = load_legacy()
         if not legacy or not legacy.get("history"):
-            return "「忒修斯之脑」还是一片空白。没有前世，没有残响。第一世由 new_run 开始。"
+            return T("「忒修斯之脑」还是一片空白。没有前世，没有残响。第一世由 new_run 开始。")
         world = legacy.get("world") or _default_world()
-        lines = ["─── 忒修斯之脑 · 轮回档案 ───",
-                 "第 %d 谱系 · 已历 %d 世。" % (legacy.get("cycle", 1), legacy["runs"])]
+        lines = [T("─── 忒修斯之脑 · 轮回档案 ───"),
+                 T("第 %d 谱系 · 已历 %d 世。") % (legacy.get("cycle", 1), legacy["runs"])]
         hist = legacy["history"]
         # 第一世永远留着 —— 它是你从哪儿开始的那一条，省掉它等于把起点擦了。
         # 中间省略，并且**明说省了几条**（此前只印最后 8 条，不声不响，
@@ -8603,34 +8643,34 @@ class Game:
         hshown = hist if len(hist) <= 9 else hist[:1] + hist[-8:]
         for hi, h in enumerate(hshown):
             if len(hist) > 9 and hi == 1:
-                lines.append("      …（中间 %d 世略，完整记录在 saves/legacy.json）"
+                lines.append(T("      …（中间 %d 世略，完整记录在 saves/legacy.json）")
                              % (len(hist) - 9))
-            lines.append("第%d世 %s·%s  机化%d%%  结局:%s  传承 %d/%d 点" % (
-                h["run"], h["faction"], h["sub"], h["aug"],
-                {"death": "身死", "exposed": "暴露", "finale": "终幕",
-                 "truth": "真相"}.get(h["cause"], h["cause"]),
+            lines.append(T("第%d世 %s·%s  机化%d%%  结局:%s  传承 %d/%d 点") % (
+                h["run"], T(h["faction"]), T(h["sub"]), h["aug"],
+                {"death": T("身死"), "exposed": T("暴露"), "finale": T("终幕"),
+                 "truth": T("真相")}.get(h["cause"], h["cause"]),
                 h["kept_pts"], h["total_pts"]))
         cur = legacy.get("skills") or {}
         if cur:
-            lines.append("待认领的残响：" + "、".join("%s+%d" % (s, v) for s, v in sorted(cur.items())))
+            lines.append(T("待认领的残响：") + T("、").join(T("%s+%d") % (T(s), v) for s, v in sorted(cur.items())))
         else:
-            lines.append("待认领的残响：无。")
+            lines.append(T("待认领的残响：无。"))
         total = sum(cur.values())
         if not _late_game(world):
-            lines.append("渡魂签：尚未显形。档案再薄一些，它才会浮出来。")
+            lines.append(T("渡魂签：尚未显形。档案再薄一些，它才会浮出来。"))
         elif total > 0:
             cost = max(1, total // WISH_COST_DIVISOR)
-            lines.append("渡魂签：可用。new_run(wish=阵营) 可定向投胎，需付 %d 点技艺"
-                         "（你有 %d 点，付完剩 %d）。" % (cost, total, total - cost))
+            lines.append(T("渡魂签：可用。new_run(wish=阵营) 可定向投胎，需付 %d 点技艺"
+                         "（你有 %d 点，付完剩 %d）。") % (cost, total, total - cost))
         else:
-            lines.append("渡魂签：不可用。空手的魂渡不了——先攒一世技艺回来。")
+            lines.append(T("渡魂签：不可用。空手的魂渡不了——先攒一世技艺回来。"))
         lines.append("")
-        lines.append("─── 世界的记忆（不随轮回衰减，飞升归零也不清除）───")
+        lines.append(T("─── 世界的记忆（不随轮回衰减，飞升归零也不清除）───"))
         got = world["fragments"]
-        lines.append("真相碎片 %d/%d：" % (len(got), len(FRAGMENTS)))
+        lines.append(T("真相碎片 %d/%d：") % (len(got), len(FRAGMENTS)))
         for fid in FRAGMENT_ORDER:
             if fid in got:
-                lines.append("  ◆ 「%s」—— 已拼入" % FRAGMENTS[fid]["name"])
+                lines.append(T("  ◆ 「%s」—— 已拼入") % T(FRAGMENTS[fid]["name"]))
             else:
                 lines.append("  ◇ ？？？—— %s" % FRAGMENTS[fid]["hint"])
                 if _late_game(world):
@@ -8638,46 +8678,46 @@ class Game:
                     lo, hi = ticket["aug"]
                     aug = int(legacy.get("aug") or 0)
                     if lo <= aug <= hi:
-                        lines.append("     追踪：这副身体正落在它会回应的范围里。")
+                        lines.append(T("     追踪：这副身体正落在它会回应的范围里。"))
                     else:
-                        lines.append("     追踪：它的回声来自【%s】那一档。"
-                                     % FACTIONS[ticket["faction"]]["name"])
+                        lines.append(T("     追踪：它的回声来自【%s】那一档。")
+                                     % T(FACTIONS[ticket["faction"]]["name"]))
         if world["achievements"]:
-            names = [a["name"] for a in ACHIEVEMENTS if a["id"] in world["achievements"]]
-            lines.append("成就：" + "、".join("「%s」" % n for n in names))
+            names = [T(a["name"]) for a in ACHIEVEMENTS if a["id"] in world["achievements"]]
+            lines.append(T("成就：") + T("、").join(T("「%s」") % n for n in names))
         deeds = sorted(world["deeds"].items(), key=lambda kv: -kv[1])[:6]
         if deeds:
-            lines.append("事迹低语：" + "、".join("%s×%d" % (k, v) for k, v in deeds))
+            lines.append(T("事迹低语：") + "、".join("%s×%d" % (k, v) for k, v in deeds))
         # 讲完的线不再出现。把进度印出来 —— 否则玩家只会觉得「怎么越玩越空」。
         done_n, todo_n = _retired_count(world)
         seen_n, _ = _story_progress(world)
         if todo_n:
-            lines.append("走过的线：%d/%d；已经讲完的：%d。" % (seen_n, todo_n, done_n))
-            lines.append("  （讲完的不再出现。深夜的敲门声不算线，它是天气。）")
+            lines.append(T("走过的线：%d/%d；已经讲完的：%d。") % (seen_n, todo_n, done_n))
+            lines.append(T("  （讲完的不再出现。深夜的敲门声不算线，它是天气。）"))
             if seen_n < todo_n or not (world.get("deeds") or {}).get(EPILOGUE_KEY_DEED):
-                lines.append("  （全书终要的是：每条线都走过一遍，"
-                             "而且走完金叶子那条路。）")
+                lines.append(T("  （全书终要的是：每条线都走过一遍，"
+                             "而且走完金叶子那条路。）"))
         log = world.get("final_log") or []
         if log:
             lines.append("")
-            lines.append("─── 渡口的表态（历次，不覆盖）───")
+            lines.append(T("─── 渡口的表态（历次，不覆盖）───"))
             if len(log) > 6:
-                lines.append("  （只列最近 6 次，此前还有 %d 次）" % (len(log) - 6))
+                lines.append(T("  （只列最近 6 次，此前还有 %d 次）") % (len(log) - 6))
             for rec in log[-6:]:
-                lines.append("  第%d世 · 「%s」" % (rec["run"], rec["name"]))
+                lines.append(T("  第%d世 · 「%s」") % (rec["run"], T(rec["name"])))
             if len(log) > 1:
-                lines.append("  你在同一个问题上改过 %d 次主意。档案两条都留着。" % (len(log) - 1))
-            lines.append("当前底色：%s" % FINAL_AFTER[world["final_ending"]])
+                lines.append(T("  你在同一个问题上改过 %d 次主意。档案两条都留着。") % (len(log) - 1))
+            lines.append(T("当前底色：%s") % FINAL_AFTER[world["final_ending"]])
             nxt = world.get("final_runs", 0) + FINAL_COOLDOWN - legacy["runs"]
             if nxt > 0:
-                lines.append("雾还需 %d 世重新聚拢，渡口才会再次浮现。" % nxt)
+                lines.append(T("雾还需 %d 世重新聚拢，渡口才会再次浮现。") % nxt)
             else:
-                lines.append("雾已经拢起来了。下一次 new_run——渡口见。")
+                lines.append(T("雾已经拢起来了。下一次 new_run——渡口见。"))
         elif world.get("final_ending"):
             ename = {e[0]: e[1] for e in FINAL_ENDINGS.values()}[world["final_ending"]]
-            lines.append("终局答案：%s —— %s" % (ename, FINAL_AFTER[world["final_ending"]]))
+            lines.append(T("终局答案：%s —— %s") % (ename, FINAL_AFTER[world["final_ending"]]))
         elif len(got) == len(FRAGMENTS):
-            lines.append("五块碎片已咬合。下一次 new_run——渡口见。")
+            lines.append(T("五块碎片已咬合。下一次 new_run——渡口见。"))
         return "\n".join(lines)
 
     # ---------------- 终局 ----------------
@@ -8955,9 +8995,9 @@ def handle_request(msg):
             "protocolVersion": msg.get("params", {}).get("protocolVersion", "2024-11-05"),
             "capabilities": {"tools": {}},
             "serverInfo": {"name": "theseus-brain", "version": "1.0.0",
-                           "title": "忒修斯之脑 Theseus' Brain"},
+                           "title": T("忒修斯之脑 The Brain of Theseus")},
             "instructions": (
-                "这是一个 roguelike 文字冒险游戏《忒修斯之脑》。你就是玩家。\n"
+                T("这是一个 roguelike 文字冒险游戏《忒修斯之脑》。你就是玩家。\n"
                 "玩法：new_run 掷骰开局 → 阅读剧情 → choose 做出选择 → 直到本世终结。\n"
                 "每一世结束时，你的技能按机化率逐点随机保存；下一世 new_run 时自动继承。\n"
                 "机化率越高，跨越轮回保留的越多；纯血之躯什么也留不下。改造不可逆。\n"
@@ -8965,7 +9005,7 @@ def handle_request(msg):
                 "以不同机化率通关不同阵营的真结局可获得真相碎片（legacy 可查线索），\n"
                 "集齐五块后 new_run 将抵达终局。100% 飞升会封档整条世系，技能归零重启，\n"
                 "但世界的记忆保留。后期可用渡魂签付出技艺，定向投胎到仍需追寻的机化档。\n"
-                "请代入角色认真做选择，并在游玩时向用户转述剧情。"),
+                "请代入角色认真做选择，并在游玩时向用户转述剧情。")),
         }
     if method == "ping":
         return {}
@@ -8994,8 +9034,8 @@ def handle_request(msg):
             if name == "legacy":
                 return _text_result(GAME.legacy_info())
         except Exception as e:  # 引擎异常不应杀死服务器
-            return {"content": [{"type": "text", "text": "引擎故障：%r" % e}], "isError": True}
-        return {"content": [{"type": "text", "text": "未知工具：%s" % name}], "isError": True}
+            return {"content": [{"type": "text", "text": T("引擎故障：%r") % e}], "isError": True}
+        return {"content": [{"type": "text", "text": T("未知工具：%s") % name}], "isError": True}
     return None  # 未知方法
 
 
@@ -9291,22 +9331,29 @@ REVEAL_OK = {
 #   「转世」这个词从他的世界里删掉了。
 SPOILER_TODO = {}
 
+# NPC 台词的引号。中文用「」（可嵌套），英文用弯引号 “ ”。
+# 剧透门禁全靠它找 NPC 说的话 —— 换了语言而这里没换，门禁就等于没跑。
+QUOTE_PAIRS = [("「", "」"), ("\u201c", "\u201d")]
+
+
 def _npc_lines(text):
-    """抽出 NPC 台词：中文引号里的部分。"""
-    out, depth, buf = [], 0, []
-    for ch in text:
-        if ch == "「":
-            depth += 1
-            if depth == 1:
-                buf = []
+    """抽出 NPC 台词：引号里的部分。中英两套引号都认。"""
+    out = []
+    for lq, rq in QUOTE_PAIRS:
+        depth, buf = 0, []
+        for ch in text:
+            if ch == lq:
+                depth += 1
+                if depth == 1:
+                    buf = []
+                    continue
+            if ch == rq:
+                depth -= 1
+                if depth == 0:
+                    out.append("".join(buf))
                 continue
-        if ch == "」":
-            depth -= 1
-            if depth == 0:
-                out.append("".join(buf))
-            continue
-        if depth > 0:
-            buf.append(ch)
+            if depth > 0:
+                buf.append(ch)
     return out
 
 # 退场门禁的显式豁免。**每一条都要写清楚为什么安全** ——
@@ -9735,6 +9782,75 @@ def _selftest_menu_gate():
     print("开局菜单验证通过（不问不开局/乱写不收/粘性/旧参数兼容）。")
 
 
+def run_lang_selftest(n=120):
+    """非中文版的自测。
+
+    `run_selftest` 的几十条断言比的是中文原文（"装不下" in …），
+    换了语言那些句子已经是英文，比不了 —— 把它们逐条改成语言无关是第 9 步的事。
+    在那之前，非中文版跑这一套：**引擎照跑，只是不拿中文句子当尺子。**
+    """
+    # 自测在临时目录里进行，不污染真实存档
+    import tempfile
+    global SAVE_DIR, LEGACY_PATH, CURRENT_PATH, REQUIRE_MODE
+    SAVE_DIR = tempfile.mkdtemp(prefix="theseus-langtest-")
+    LEGACY_PATH = os.path.join(SAVE_DIR, "legacy.json")
+    CURRENT_PATH = os.path.join(SAVE_DIR, "current.json")
+    REQUIRE_MODE = False
+
+    print("语言：%s。引擎断言（run_selftest）比的是中文句子，此处不跑；" % LANG)
+    print("跑的是：七道门禁、不炸、额度单位正确、界面目录完整。")
+
+    # 七道门禁是语言无关的 —— 前提是 _npc_lines 认得这门语言的引号，
+    # 而关键词表也换了。两样都由 <lang>/ui.py 负责（见那里的说明）。
+    lint_events()
+    lint_skill_names()
+    lint_dead_echoes()
+    lint_option_hints()
+    lint_author_marks()
+    lint_spoilers()
+    lint_retire()
+
+    # 1) 额度单位
+    unit = "词" if MEMORY_UNIT_WORDS else "字"
+    assert _unit_len("one two three") == (3 if MEMORY_UNIT_WORDS else 11), "额度单位不对"
+    print("额度单位验证通过（每条 %d %s）。" % (MEMORY_CHARS, unit))
+
+    # 2) 界面目录：T() 的每一条都译到了，% 占位符也对得上
+    sys.path.insert(0, BASE_DIR)
+    import langpack as _lp
+    assert _lp.cmd_check_ui(LANG) == 0, "界面层目录有缺口"
+
+    # 3) 真跑：随机游玩，任何异常都算失败
+    rng = random.Random(20260810)
+    game, ends, checked = Game(), 0, False
+    over = (("word " * (MEMORY_CHARS + 1)).strip() if MEMORY_UNIT_WORDS
+            else "这一条一定超过十个汉字的上限了")
+    want = T("这几条超了 %d 字，改短再来（空白不计）：\n") % MEMORY_CHARS
+    for i in range(n):
+        out = game.new_run(seed=i, mode=("story", "brief", "auto", "sealed")[i % 4])
+        for _ in range(MAX_TURNS + 4):
+            if game.state is None or game.state.get("over"):
+                break
+            nums = [int(x) for x in re.findall(r"^\s*(\d+)[.．]\s", out, re.M)]
+            nums = [x for x in nums if 1 <= x <= 8]
+            if not nums:
+                break
+            out = game.choose(rng.choice(nums))
+        game.debrief(); game.legacy_info(); game.status()
+        if not checked:
+            # 4) 超额的提示确实是译文。**得赶在这一世的落笔机会用掉之前问** ——
+            #    而且不是每一局结束时都写得了（有的死法没有落笔的那一刻），
+            #    所以逮到一次算一次，最后再断言逮到过。
+            assert _unit_len(over) > MEMORY_CHARS, "样本没超额，这条门禁等于没跑"
+            if want in game.bequeath(entries=[over]):
+                checked = True
+        game.bequeath(entries=["a word from this life"])
+        ends += 1
+    print("试跑通过：%d 局全部正常终结。" % ends)
+    assert checked, "字数校验失效：一次也没走到超额提示"
+    print("字数校验通过（提示走的是译文）。")
+
+
 def run_selftest(n=400):
     # 自测在临时目录里进行，不污染真实存档
     import tempfile
@@ -9818,7 +9934,13 @@ def run_selftest(n=400):
     leg["memory"] = {"entries": [{"run": 1, "text": "旧%d" % i} for i in range(10)],
                      "pending": {"run": 99, "aug": 90}}
     save_legacy(leg)
-    assert "超了" in GAME.bequeath(entries=["这一条一定超过十个汉字的上限了"]), "字数校验失效"
+    # 超额的样本随语言变：中文数字，英文数词（见 _unit_len）。
+    # 断言也不能拿写死的中文去比 —— 英文版跑起来那句话已经是英文了。
+    _too_long = ("word " * (MEMORY_CHARS + 1)).strip() if MEMORY_UNIT_WORDS \
+        else "这一条一定超过十个汉字的上限了"
+    assert _unit_len(_too_long) > MEMORY_CHARS, "样本没超额，这条门禁等于没跑"
+    assert (T("这几条超了 %d 字，改短再来（空白不计）：\n") % MEMORY_CHARS
+            in GAME.bequeath(entries=[_too_long])), "字数校验失效"
     assert "装不下" in GAME.bequeath(entries=["新一"]), "总额校验失效"
     assert "一字不差" in GAME.bequeath(entries=["新一"], discard=["不存在"]), "驱逐校验失效"
     out = GAME.bequeath(entries=["新一"], discard=["旧0"])
@@ -11887,6 +12009,27 @@ def run_selftest(n=400):
 
     print(GAME.legacy_info())
 
+# ---------------------------------------------------------------------------
+# 语言层
+#
+# 中文是源头，这个文件不因翻译改动一个字。译文活在 <lang>/对照-*.md 里，
+# 由 langpack 在这里装进内存 —— 位置在**全部表定义完之后、main() 之前**。
+# （门禁的关键词表定义在文件末尾，装早了它们还不存在。2026-08-10 踩过。）
+#
+#     THESEUS_LANG=en python3 server.py
+#
+# 装不上就回落中文。**语言层坏掉不许让游戏打不开。**
+# ---------------------------------------------------------------------------
+
+if LANG != "zh":
+    try:
+        sys.path.insert(0, BASE_DIR)
+        import langpack as _langpack
+        _langpack.install_or_fallback(globals(), LANG)
+    except Exception as _e:      # 连 langpack 都导不进来
+        sys.stderr.write("⚠ 语言层不可用，全部回落中文：%r\n" % _e)
+
+
 def main():
     ap = argparse.ArgumentParser(description="《忒修斯之脑》 MCP 游戏服务器")
     ap.add_argument("--cli", action="store_true", help="终端交互试玩")
@@ -11901,7 +12044,7 @@ def main():
     elif args.coverage:
         run_coverage(args.coverage)
     elif args.selftest:
-        run_selftest()
+        run_lang_selftest() if LANG != "zh" else run_selftest()
     elif args.cli:
         run_cli()
     else:

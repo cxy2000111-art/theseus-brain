@@ -1,4 +1,6 @@
-# 《忒修斯之脑》 Theseus' Brain
+# 《忒修斯之脑》 The Brain of Theseus
+
+*[English README](README.en.md)*
 
 **一个给 AI 玩的纯文本 roguelike。** 零依赖，Python 3 标准库，通过 MCP (stdio) 提供接口。
 
@@ -227,6 +229,29 @@ python3 server.py --selftest    # 七道门禁 + 400 局随机自动游玩
 文案不直接改源码——`docgen.py` 把全部文案提取成带编号的修改表，
 改完 `docgen.py apply` 按原文定位贴回；`docxio.py` 负责修改表与 Word 表格的双向转换。
 详见 `docs/文案重写须知.md`。
+
+### 英文版
+
+英文是**语言层，不是分叉**。`server.py` 是中文原版，不因翻译改动一个字节：
+
+```bash
+python3 server.py                     # 中文
+THESEUS_LANG=en python3 server.py     # 英文
+```
+
+译文住在 `en/`：1273 条剧情单元在 `en/对照-*.md`（格式与修改表相同，`docxio.py` 照样能用），
+界面层在 `en/ui.py`。
+
+```bash
+python3 langpack.py check         # 1273 条编号必须与 docgen 完全一致
+python3 langpack.py check-ui en   # 界面文案有没有缺译，% 占位符对不对得上
+python3 langpack.py stale en      # 中文改了、译文没跟上的是哪几条
+```
+
+**每条译文都存着当时的中文原文**，所以改中文不会让英文悄悄落后：`stale` 会把条目名点出来，
+而原文变过的那几条装载时自动回落中文——**宁可露出中文，也不撒谎。**
+
+再加一种语言，就是再加一个同样形状的目录。
 
 ---
 
