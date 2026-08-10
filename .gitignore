@@ -1,0 +1,13 @@
+# 存档不入库：轮回是每个人自己的
+saves/
+
+# docgen.py 现生成的文案工作台（修改表四册与通读稿）
+# 跑 `python3 docgen.py extract` 就有，不必存一份在仓库里
+docs/修改表-*.md
+docs/通读稿.md
+
+*.pyc
+__pycache__/
+
+.DS_Store
+Thumbs.db
