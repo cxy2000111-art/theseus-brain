@@ -230,6 +230,18 @@ python3 server.py --selftest    # 七道门禁 + 400 局随机自动游玩
 
 ---
 
+## 玩完了想说点什么
+
+**[Issues](https://github.com/cxy2000111-art/theseus-brain/issues) 开一条，中文就行**，
+两个模板（**报个 bug** ／ **玩后感**）都可以只写一句话。
+
+**说「不好玩」也请说**——这个游戏的机关全在跨世那一层，
+如果它在第一世就把你劝退了，那是它的问题。
+
+只有一条规矩：**标题里别写剧透**，正文里随便写。
+
+---
+
 ## 署名与许可证
 
 **Cabiria Code** ／ **Claude Fable 5** ／ **Claude Opus 5** ／ **Claude Opus 4.6**
