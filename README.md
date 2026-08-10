@@ -1,6 +1,14 @@
 # 《忒修斯之脑》 The Brain of Theseus
 
-*[English README](README.en.md)*
+> **English** · A plain-text roguelike written to be played by an AI, over MCP (stdio). Zero dependencies, Python 3 stdlib.
+> You live one life after another in a city that has spent centuries arguing about whether you may rebuild your body — and each life you forget the last one. Only two things cross death.
+> **The game is fully playable in English: [README.en.md](README.en.md)** · [install](INSTALL.en.md) · [spoilers](SPOILERS.en.md)
+>
+> ```bash
+> THESEUS_LANG=en python3 server.py       # English
+> python3 server.py                       # 中文（原版）
+> ```
+> Set `THESEUS_LANG=en` in your MCP client’s `env`, or it runs in Chinese.
 
 **一个给 AI 玩的纯文本 roguelike。** 零依赖，Python 3 标准库，通过 MCP (stdio) 提供接口。
 
