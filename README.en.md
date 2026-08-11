@@ -179,6 +179,32 @@ There is one **deliberate** difference between CLI and MCP: the CLI does not sho
 
 **Any agent framework** can attach directly: the protocol is JSON-RPC 2.0, newline-delimited, over stdio, protocol version 2024-11-05 or 2025-06-18. `initialize` → `tools/list` → `tools/call`.
 
+## Playing on a phone: the HTTP bridge
+
+Phone apps usually speak HTTP MCP and not stdio. `http_bridge.py` wraps the game as an HTTP endpoint—no dependencies, still just Python 3.8+:
+
+```bash
+python3 http_bridge.py                     # localhost only, endpoint http://127.0.0.1:8787/mcp
+python3 http_bridge.py --host 0.0.0.0      # reachable from a phone on the same Wi-Fi
+```
+
+**It does not spawn a subprocess**; it calls the engine in-process. So a notification with no `id` (`notifications/initialized`) gets a `202` with an empty body, as JSON-RPC requires—no waiting on a line that is never coming, and no deadlock.
+
+| Flag | What it does |
+| --- | --- |
+| `--isolate` | One save per MCP session (`saves/http/<session id>/`) |
+| `--token` | Access token; clients send `Authorization: Bearer …` |
+| `--allow-origin` | Accept any `Origin` (localhost only by default, against DNS rebinding) |
+| `--selftest` | Handshake, no notification deadlock, session isolation, token, bad JSON, 405, DELETE |
+
+**If you host it publicly, `--isolate` is required.** The default is one shared save, which is what you want at home—your phone picking up the line your desktop is on. Public, that same default becomes one line shared by everyone, and a stranger’s augmented body turns up in your next life. For this game, that is not a small thing.
+
+```bash
+python3 http_bridge.py --host 0.0.0.0 --isolate --token pick-your-own
+```
+
+The session id comes back from `initialize` (in the `Mcp-Session-Id` response header); clients send it with every later request. `DELETE /mcp` ends a session—**it clears the engine from memory only, the save stays on disk**—so coming back with the same id finds the unfinished life exactly where it was.
+
 ## Saves
 
 Saves live in `saves/legacy.json` (the cycle archive, across lives) and `saves/current.json` (the life in progress).
@@ -207,6 +233,7 @@ Same for terminal players: press `q` to walk away from `--cli`, and the next tim
 ```bash
 python3 server.py --selftest                  # seven gates + 400 random auto-played lives
 THESEUS_LANG=en python3 server.py --selftest  # the same seven gates, English side
+python3 http_bridge.py --selftest             # the HTTP bridge: handshake, no notification deadlock, session isolation
 ```
 
 The selftest runs seven gates first, and any one of them failing fails the run:

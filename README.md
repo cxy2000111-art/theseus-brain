@@ -202,6 +202,38 @@ CLI 和 MCP 有一处**故意的差异**：CLI 不弹玩法菜单——人已经
 **任何 agent 框架**都能直接接：协议是 JSON-RPC 2.0，按行分隔，stdio 传输，
 协议版本 2024-11-05 / 2025-06-18 均可。`initialize` → `tools/list` → `tools/call`。
 
+## 手机上玩：HTTP 桥
+
+手机 App 一般只接 HTTP 的 MCP，接不了 stdio。`http_bridge.py` 把这个游戏包成一个
+HTTP 端点，零依赖，仍然只要 Python 3.8+：
+
+```bash
+python3 http_bridge.py                     # 只听本机，端点 http://127.0.0.1:8787/mcp
+python3 http_bridge.py --host 0.0.0.0      # 同一个 Wi-Fi 下的手机也连得进来
+```
+
+**它不开子进程**，直接在进程内调引擎——所以不带 `id` 的通知（`notifications/initialized`）
+照 JSON-RPC 回 `202` 空正文，不会有「等一行永远不来的回应」那种死锁。
+
+| 开关 | 作用 |
+| --- | --- |
+| `--isolate` | 每个 MCP 会话一份存档（`saves/http/<会话 id>/`） |
+| `--token` | 访问令牌，客户端用 `Authorization: Bearer …` 带上 |
+| `--allow-origin` | 放行任意 `Origin`（默认只放本机，防 DNS rebinding） |
+| `--selftest` | 自测：握手、通知不死锁、会话隔离、令牌、坏 JSON、405、DELETE |
+
+**架在公网上给别人玩，`--isolate` 必须开。** 默认是共用一份存档——那是为「自己在家，
+手机接桌面那条世系」准备的；放到公网上就变成所有人共用一条世系，
+陌生人换过的身体会出现在你的下一世里。对这个游戏来说，那不是小事。
+
+```bash
+python3 http_bridge.py --host 0.0.0.0 --isolate --token 你自己想一个
+```
+
+会话 id 由 `initialize` 时发回（`Mcp-Session-Id` 响应头），客户端之后每次请求带上它。
+`DELETE /mcp` 结束会话——**只清内存里的引擎，存档留在盘上**，下次拿同一个 id 连回来，
+没走完的那一世原样还在。
+
 ## 存档
 
 存档写在 `saves/legacy.json`（轮回档案，跨世）与 `saves/current.json`（进行中的一世）。
@@ -226,7 +258,8 @@ CLI 和 MCP 有一处**故意的差异**：CLI 不弹玩法菜单——人已经
 ## 给想改它的人
 
 ```bash
-python3 server.py --selftest    # 七道门禁 + 400 局随机自动游玩
+python3 server.py --selftest       # 七道门禁 + 400 局随机自动游玩
+python3 http_bridge.py --selftest  # HTTP 桥：握手/通知不死锁/会话隔离/令牌
 ```
 
 自测每次先跑七道门禁，任何一道不过直接失败：

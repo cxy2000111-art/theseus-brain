@@ -71,6 +71,21 @@ Tools: `new_run` (optional seed / wish / mode / abandon), `choose`, `status`, `l
 
 **After a disconnect**: the life in progress is written to disk after every `choose`, and a fresh process picks it back up on its own. Call `status` once you reconnect and you get the scene you stopped at; `new_run` cannot overwrite it, and dropping a life on purpose takes an explicit `new_run(abandon=true)`.
 
+## Clients that only speak HTTP (phone apps and the like)
+
+```bash
+python3 http_bridge.py                  # endpoint http://127.0.0.1:8787/mcp
+python3 http_bridge.py --host 0.0.0.0   # reachable from a phone on the same Wi-Fi
+```
+
+No dependencies, same Python. Point the client’s MCP settings at that `/mcp` address. **By default it shares one line with your desktop.** To host it publicly:
+
+```bash
+python3 http_bridge.py --host 0.0.0.0 --isolate --token pick-your-own
+```
+
+`--isolate` gives every session its own save (without it, everyone shares one line); `--token` is the access token. `python3 http_bridge.py --selftest` checks the bridge itself.
+
 ## Clients with no MCP (web ChatGPT and the like): hand them the whole package
 
 Some clients have no stdio MCP but do have a sandbox that runs Python. Don’t make them fetch the files from GitHub—**zip this folder up, upload it straight into the conversation**, and say:

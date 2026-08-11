@@ -70,6 +70,23 @@ MCP Servers 设置里添加同样的 `command` + `args` 即可。
 重连之后调 `status` 即可拿回停下的那一幕；`new_run` 盖不掉它，
 真要弃掉得写明 `new_run(abandon=true)`。
 
+## 只接 HTTP 的客户端（手机 App 等）
+
+```bash
+python3 http_bridge.py                  # 端点 http://127.0.0.1:8787/mcp
+python3 http_bridge.py --host 0.0.0.0   # 同一个 Wi-Fi 下的手机连得进来
+```
+
+零依赖，同一个 Python。客户端的 MCP 设置里填那个 `/mcp` 地址即可。
+**默认与桌面共用同一条世系。** 架在公网上给别人玩：
+
+```bash
+python3 http_bridge.py --host 0.0.0.0 --isolate --token 你自己想一个
+```
+
+`--isolate` 每个会话一份存档（不开则所有人共用一条世系），`--token` 是访问口令。
+`python3 http_bridge.py --selftest` 可验证桥本身。
+
 ## 挂不上 MCP 的客户端（网页版 ChatGPT 等）：整包丢进去
 
 有些客户端没有 stdio MCP，但有一个能跑 Python 的沙箱。那就不要让它现去
