@@ -592,7 +592,9 @@ TEXT = {
     "以不同机化率通关不同阵营的真结局可获得真相碎片（legacy 可查线索），\n"
     "集齐五块后 new_run 将抵达终局。100% 飞升会封档整条世系，技能归零重启，\n"
     "但世界的记忆保留。后期可用渡魂签付出技艺，定向投胎到仍需追寻的机化档。\n"
-    "请代入角色认真做选择，并在游玩时向用户转述剧情。":
+    "请代入角色认真做选择，并在游玩时向用户转述剧情。\n"
+    "**断线、重启、或者你不记得玩到哪儿了：先调 status。** 进行中的一世\n"
+    "每一步都落盘，status 会把你停下的那一幕原样还给你。new_run 也盖不掉它。":
         "This is a roguelike text adventure called The Brain of Theseus. You are the player.\n"
         "The loop: new_run rolls you into a life → read the scene → choose → until the "
         "life ends.\n"
@@ -607,7 +609,42 @@ TEXT = {
         "With all five, new_run arrives at the endgame. Ascending at 100% will seal the whole "
         "line, zero your skills and restart—but the world’s memory stays.\n"
         "Later on, a ferry lot lets you pay skill to be born into a band you still need.\n"
-        "Play in character, choose in earnest, and relay the story to the user as you go.",
+        "Play in character, choose in earnest, and relay the story to the user as you go.\n"
+        "**Dropped connection, restart, or you have lost track of where you were: call "
+        "status first.** A life in progress is written to disk at every step, and status "
+        "hands you back the scene you stopped at, word for word. new_run cannot overwrite it.",
+
+    # ---- 断线重连 ----
+    "【这一世还没走完】\n"
+    "断线、重启、换个客户端都不要紧，引擎替你记着。\n"
+    "下面就是你停下的地方：照原样念给你的人类，然后用 choose 接着走。\n"
+    "（真要弃掉这一世重新投胎：new_run(abandon=true)。**弃掉的一世\n"
+    "不入档案** —— 技艺不传，词条不留，等于没活过。）\n":
+        "THIS LIFE IS NOT OVER YET\n"
+        "A dropped connection, a restart, a different client—none of it matters. "
+        "The engine has been keeping your place.\n"
+        "Here is where you stopped: read it to your human as it stands, then carry on "
+        "with choose.\n"
+        "(To truly abandon this life and be born again: new_run(abandon=true). "
+        "**An abandoned life never enters the record**—no skill is passed on, no entry "
+        "is kept. It is as though it were never lived.)\n",
+
+    "〔上一世已弃：它没有进入档案，技艺与词条都不传。〕":
+        "*(The last life was abandoned. It did not enter the record: no skill, no entry, "
+        "nothing passed on.)*",
+
+    "〔进行中的那一世没能恢复：游戏更新过，你停在的那一幕在新的\n"
+    "  事件表里已经不存在了。那一档已经清掉。历世档案（机化率、\n"
+    "  技艺、世界的记忆）完好无损 —— 用 new_run 重新投胎即可。〕":
+        "*(The life in progress could not be restored: the game has been updated, and the "
+        "scene you stopped at no longer exists in the new table of events. That save has "
+        "been cleared. The record of past lives—mechanization, skill, the world’s "
+        "memory—is untouched. Use new_run to be born again.)*",
+
+    "〔上次退出时这一世还没走完 —— 接着走。想重开：q 退出，删掉 "
+    "saves/current.json 再进来。〕":
+        "*(This life was still unfinished when you left—picking it back up. To start over "
+        "instead: q to quit, delete saves/current.json, and come back in.)*",
 }
 
 

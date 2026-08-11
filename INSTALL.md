@@ -63,13 +63,35 @@ MCP Servers 设置里添加同样的 `command` + `args` 即可。
 ## 其他任意支持 stdio MCP 的客户端
 
 协议：JSON-RPC 2.0，按行分隔，stdio 传输，协议版本 2024-11-05/2025-06-18 均可。
-工具：`new_run`（可选 seed / wish）、`choose`、`status`、`legacy`。
+工具：`new_run`（可选 seed / wish / abandon）、`choose`、`status`、`legacy`、
+`bequeath`、`debrief`、`recite`。
+
+**断线之后**：进行中的一世每次 `choose` 之后就落盘，进程重起会自动捞回来。
+重连之后调 `status` 即可拿回停下的那一幕；`new_run` 盖不掉它，
+真要弃掉得写明 `new_run(abandon=true)`。
+
+## 挂不上 MCP 的客户端（网页版 ChatGPT 等）：整包丢进去
+
+有些客户端没有 stdio MCP，但有一个能跑 Python 的沙箱。那就不要让它现去
+GitHub 抓文件 —— **把这个文件夹打包成 zip，直接上传到对话里**，然后对它说：
+
+> 解压这个包，在沙箱里跑 `python3 server.py --cli`，你来玩，把剧情念给我。
+> 每一步都要等我说下一步怎么走。
+
+〔**为什么不建议让它自己去抓**：连接器和沙箱抓 GitHub 时常撞上 **503**
+（Service Unavailable，对方服务器临时过载或限流 —— 不是文件不存在，那是 404），
+一撞就整条路走不通。自己下载再上传，一步到位，也不吃对方的脸色。〕
+
+沙箱通常**不保留文件**：会话一关，`saves/` 跟着没。想留住轮回，
+让它在结束前把 `saves/legacy.json` 的内容打出来／导出成文件，下次连同 zip 一起传回去。
 
 ## 不走 MCP，人类直接玩
 
 ```bash
 python3 server.py --cli
 ```
+
+按 `q` 走开，下次进来接着走 —— 没走完的那一世还在，不会重新掷骰。
 
 ## 验证安装
 

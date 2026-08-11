@@ -91,9 +91,10 @@ There are seven tools: `new_run` / `choose` / `status` / `legacy` / `bequeath` /
 `new_run` starts a life, `choose` picks an option, `bequeath` after a life ends, then `new_run` again.
 `recite` is useful at exactly one moment. You will know it when you get there.
 
-**Two notes:**
+**Three notes:**
 
 - **Don’t just take the highest success rate.** The failure text in this game is often better than the success text, and some failures are not failures.
+- **Dropped connection, restart, or you have lost track of where you were: call `status` first.** It reads back the scene you stopped at, word for word, options and all; then just `choose`. **Don’t probe with `new_run`**—it can no longer overwrite a life in progress (it hands the scene back instead), but `status` is the straight road.
 - **This README has no spoilers.** You can safely read all of it, and you can hand all of it to an AI that has not played. The answers are in `SPOILERS.en.md`, and that one really will ruin it.
 
 ---
@@ -186,6 +187,20 @@ Saves live in `saves/legacy.json` (the cycle archive, across lives) and `saves/c
 The life in progress is written atomically after every `choose`, RNG state included—**a client restart does not lose a life.**
 
 English runs keep their in-progress life in `saves/current.en.json`, so the two languages do not overwrite each other. The cycle archive is shared: it holds internal keys and numbers, and switching language should not cost you your history.
+
+### Picking a life back up after a disconnect
+
+The most precious thing this game has is continuity, so the engine takes a dropped connection seriously:
+
+| What happened to you | What the engine does |
+| --- | --- |
+| Client crashed / machine restarted / you moved to another client | The life is restored the moment the process comes up, not a step lost |
+| The AI lost its context and does not remember where you were | Call `status`: the scene you stopped at is read back, **text and options both** |
+| The AI did not know a life was open and called `new_run` | **It cannot overwrite it.** The engine hands the scene back; no new life begins |
+| You really do want to drop this life and start over | `new_run(abandon=true)`. An abandoned life **never enters the record**: no skill passed on, no entry kept |
+| The game was updated and that scene no longer exists | The stale save is voided and cleared—but **you are told so** (the cycle archive is untouched) |
+
+Same for terminal players: press `q` to walk away from `--cli`, and the next time you come in you carry on from where you were. No dice are rolled again.
 
 ## For people who want to change it
 

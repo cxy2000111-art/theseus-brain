@@ -6622,6 +6622,7 @@ class Game:
     def __init__(self):
         self.state = None  # None = 没有进行中的对局
         self._rng = random.Random()
+        self._note = None  # 一句话的系统提示，攒到下一次开口时一并说出去
         self._restore()
 
     # ---------------- 断线续命 ----------------
@@ -6647,11 +6648,49 @@ class Game:
                     and not state.get("deathbed")
                     and not state.get("drychoice")):
                 if self._find_event_static(state["pending"]) is None:
-                    return False          # 事件表改过了，旧档作废
+                    # 事件表改过了，旧档作废。**但要说一声** —— 此前是静默丢弃，
+                    # 玩家 git pull 一下，手上那一世就凭空没了，还以为是自己弄丢的。
+                    clear_current()
+                    self._note = T(
+                        "〔进行中的那一世没能恢复：游戏更新过，你停在的那一幕在新的\n"
+                        "  事件表里已经不存在了。那一档已经清掉。历世档案（机化率、\n"
+                        "  技艺、世界的记忆）完好无损 —— 用 new_run 重新投胎即可。〕")
+                    return False
             self.state, self._rng = state, rng
             return True
         except Exception:
             return False
+
+    # ---------------- 断线重连 ----------------
+    #
+    # 存档一直是每次 choose 之后就落盘的，进程死了也还在。缺的从来不是存档，
+    # 是**接的那一手**：重连之后 AI 丢了上下文，照文档去调 new_run，
+    # 于是一世好端端地躺在 saves/current.json 里，被一句新的开场白盖掉。
+    # 现在 new_run 会先把它还回来，弃不弃由人说了算。
+    # （2026-08-11 玩家反馈：「断线续档和当前世恢复能再稳一点」）
+
+    def in_progress(self):
+        """手上还有没有一世没走完。"""
+        return self.state is not None and not self.state.get("over")
+
+    def resume(self):
+        """把停下的那一幕原样还回去 —— 断线、重启、换客户端都走这里。"""
+        return T("【这一世还没走完】\n"
+                 "断线、重启、换个客户端都不要紧，引擎替你记着。\n"
+                 "下面就是你停下的地方：照原样念给你的人类，然后用 choose 接着走。\n"
+                 "（真要弃掉这一世重新投胎：new_run(abandon=true)。**弃掉的一世\n"
+                 "不入档案** —— 技艺不传，词条不留，等于没活过。）\n") + "\n" + self.status()
+
+    def abandon(self):
+        """弃掉进行中的一世。不结算、不入档案 —— 它没有活过。"""
+        self.state = None
+        clear_current()
+        self._note = T("〔上一世已弃：它没有进入档案，技艺与词条都不传。〕")
+
+    def take_note(self):
+        """取走攒着的那句系统提示（只说一次）。"""
+        note, self._note = self._note, None
+        return note
 
     @staticmethod
     def _find_event_static(eid):
@@ -8571,7 +8610,9 @@ class Game:
         return T("技能：") + "  ".join(T("%s%d") % (T(s), st["skills"][s]) for s in SKILLS)
 
     def status(self):
-        return self._seal(self._status_inner())
+        out = self._seal(self._status_inner())
+        note = self.take_note()
+        return (note + "\n\n" + out) if note else out
 
     def _repro_line(self):
         """报 bug 时贴这两行，这一局就能被一模一样地重跑。
@@ -8910,7 +8951,9 @@ TOOLS = [
                         "机化率跨世累积、只涨不降，每一幕之后你会被问要不要往上走。\n"
                         "跨进新的一档时，三个问题会问出你更像这一档里的哪一派。\n"
                         "自动继承上一世按机化率保存的技能残响。集齐五块真相碎片后进入终局。\n"
-                        "后期可用渡魂签定向投胎；是否可用及代价见 legacy。"),
+                        "后期可用渡魂签定向投胎；是否可用及代价见 legacy。\n"
+                        "**它盖不掉进行中的一世**：上一世还没走完时，它把你停下的那一幕\n"
+                        "原样还给你，不会开新的。断线重连后调它是安全的。"),
         "inputSchema": {"type": "object",
                         "properties": {
                             "seed": {"type": "integer", "description": "随机种子（可选）"},
@@ -8925,6 +8968,10 @@ TOOLS = [
                                                      "由他来选。story 详细剧情版／"
                                                      "brief 快速流程版／auto 你自己玩／"
                                                      "sealed 封存。设过一次之后长期沿用。")},
+                            "abandon": {"type": "boolean",
+                                        "description": ("弃掉进行中的那一世，强行重开（可选）。"
+                                                        "**先问过人类再填** —— 弃掉的一世不入档案："
+                                                        "技艺不传，词条不留，等于没活过。")},
                             "disclosure": {"type": "string", "enum": ["open", "sealed"],
                                            "description": ("披露模式（粘性）。open＝原文照贴；"
                                                            "sealed＝每次输出附一段「可转述给人类」的结构摘要，"
@@ -8941,7 +8988,10 @@ TOOLS = [
     },
     {
         "name": "status",
-        "description": "查看当前一世的状态：阵营、派系、机化率、身体、疑云、技能、当前事件与选项。",
+        "description": ("查看当前一世的状态：阵营、派系、机化率、身体、疑云、技能、"
+                        "当前事件与选项（原文照给）。\n"
+                        "**断线重连、或者你不记得玩到哪儿了，第一件事就是调它** —— "
+                        "它会把你停下的那一幕原样再念一次，接着 choose 就行。"),
         "inputSchema": {"type": "object", "properties": {}, "required": []},
     },
     {
@@ -9005,7 +9055,9 @@ def handle_request(msg):
                 "以不同机化率通关不同阵营的真结局可获得真相碎片（legacy 可查线索），\n"
                 "集齐五块后 new_run 将抵达终局。100% 飞升会封档整条世系，技能归零重启，\n"
                 "但世界的记忆保留。后期可用渡魂签付出技艺，定向投胎到仍需追寻的机化档。\n"
-                "请代入角色认真做选择，并在游玩时向用户转述剧情。")),
+                "请代入角色认真做选择，并在游玩时向用户转述剧情。\n"
+                "**断线、重启、或者你不记得玩到哪儿了：先调 status。** 进行中的一世\n"
+                "每一步都落盘，status 会把你停下的那一幕原样还给你。new_run 也盖不掉它。")),
         }
     if method == "ping":
         return {}
@@ -9017,9 +9069,19 @@ def handle_request(msg):
         args = params.get("arguments") or {}
         try:
             if name == "new_run":
-                return _text_result(GAME.new_run(seed=args.get("seed"), wish=args.get("wish"),
-                                                 disclosure=args.get("disclosure"),
-                                                 mode=args.get("mode")))
+                # 断线重连的那一手：手上还有一世没走完，就先把它还回去。
+                # 这道闸只拦 MCP 这条路 —— CLI 那边人自己坐在终端前（见 run_cli），
+                # 自测和 --replay 要的正是「一句 new_run 就重开」。
+                if GAME.in_progress():
+                    if args.get("abandon"):
+                        GAME.abandon()
+                    else:
+                        return _text_result(GAME.resume())
+                out = GAME.new_run(seed=args.get("seed"), wish=args.get("wish"),
+                                   disclosure=args.get("disclosure"),
+                                   mode=args.get("mode"))
+                note = GAME.take_note()
+                return _text_result((note + "\n\n" + out) if note else out)
             if name == "choose":
                 return _text_result(GAME.choose(int(args.get("option", 0))))
             if name == "status":
@@ -9211,7 +9273,15 @@ def run_replay(script_json):
 def run_cli():
     global REQUIRE_MODE
     REQUIRE_MODE = False        # 人自己坐在终端前，不用再问自己一遍
-    print(GAME.new_run())
+    # 上次按 q 走开时，那一世还没走完 —— 接着走，别再掷一次骰。
+    # 存档本来就一直在（每次 choose 都落盘），此前只是这里没人来接：
+    # 一句 new_run 就把它盖掉了。（2026-08-11 玩家反馈）
+    if GAME.in_progress():
+        print(T("〔上次退出时这一世还没走完 —— 接着走。想重开：q 退出，删掉 "
+                "saves/current.json 再进来。〕"))
+        print(GAME.status())
+    else:
+        print(GAME.new_run())
     if GAME.state is None or GAME.state.get("over"):
         return                  # 落幕之后没有下一世，别让终端在这儿转空圈
     while not GAME.state["over"]:
@@ -11998,6 +12068,70 @@ def run_selftest(n=400):
           "忘川才让她从第 0 次重来/双六顶格不空挂/书只卖一次）。")
 
     print("第六轮试玩反馈回归通过（机化率分档/求救芯片有出口/CLI 能开口/碎片提示对得上闸门）。")
+
+    # ---- 断线重连：一世不该因为客户端重启而丢掉 ------------------------
+    #      （2026-08-11 玩家反馈：「断线续档和当前世恢复能再稳一点」）
+    # GAME 是模块级的那一份，handle_request 认的就是它 —— 这里换成测试用的，
+    # 走 globals() 是因为本函数前面已经读过 GAME，不能再补 global 声明。
+    keep_game = GAME
+    keep_rc = (SAVE_DIR, LEGACY_PATH, CURRENT_PATH)
+    d_rc = tempfile.mkdtemp(prefix="theseus-reconnect-")
+    SAVE_DIR, LEGACY_PATH = d_rc, os.path.join(d_rc, "legacy.json")
+    CURRENT_PATH = os.path.join(d_rc, "current.json")
+
+    def _call(tool, **kw):
+        res = handle_request({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                              "params": {"name": tool, "arguments": kw}})
+        return res["content"][0]["text"]
+
+    g_rc = Game(); g_rc.new_run(seed=808, mode="story")
+    for _ in range(4):
+        if g_rc.state.get("over"):
+            break
+        g_rc.choose(1)
+    assert not g_rc.state["over"], "样本这一世走得太快，这条门禁等于没跑"
+    snap = (g_rc.state["run_no"], g_rc.state["turn"], g_rc.state["aug"],
+            g_rc.state["hp"], g_rc.state["pending"])
+
+    # ① 客户端重启：新起的进程要把这一世捞回来
+    g_live = Game()
+    globals()["GAME"] = g_live
+    assert g_live.in_progress(), "重启之后没能捞回进行中的一世"
+    assert (g_live.state["run_no"], g_live.state["turn"], g_live.state["aug"],
+            g_live.state["hp"], g_live.state["pending"]) == snap, "捞回来的不是同一世"
+
+    # ② AI 丢了上下文，照文档去调 new_run —— 不许盖掉，要把那一幕还回来
+    out_rc = _call("new_run", seed=999)
+    assert "这一世还没走完" in out_rc, "new_run 没有拦住，进行中的一世被盖掉了"
+    assert g_live.state["pending"] == snap[4], "被拦下的 new_run 仍然动了状态"
+    assert "第 %d/%d 幕" % (snap[1], MAX_TURNS) in out_rc, "还回来的那一幕没有状态条"
+    assert re.search(r"^\s*1[.．]\s", out_rc, re.M), \
+        "还回来的那一幕没有选项，AI 接不下去"
+
+    # ③ status 是重连之后该调的第一件事：同样把那一幕原样还回来
+    assert re.search(r"^\s*1[.．]\s", _call("status"), re.M), \
+        "status 没有把停下的那一幕还回来"
+
+    # ④ 明说要弃，才准弃 —— 而且弃掉的一世不进档案
+    runs_before = (load_legacy() or {}).get("runs", 0)
+    out_ab = _call("new_run", seed=777, abandon=True)
+    assert "上一世已弃" in out_ab, "弃掉一世却没说一声"
+    assert g_live.state["seed"] == 777, "abandon 之后没有真的重开"
+    assert (load_legacy() or {}).get("runs", 0) == runs_before, "弃掉的一世混进了档案"
+    assert g_live.state["run_no"] == snap[0], "弃掉的一世白占了一个世数"
+
+    # ⑤ 游戏更新过、旧档的那一幕没了：清掉，并且说一声（此前是静默丢弃）
+    save_current(dict(g_live.state, pending="__这一幕已经不存在了__"), random.Random(5))
+    g_stale = Game()
+    assert not g_stale.in_progress(), "作废的旧档不该被当成进行中的一世"
+    assert not os.path.exists(CURRENT_PATH), "作废的旧档没有清掉，下次还会再试一遍"
+    assert "没能恢复" in g_stale.status(), "旧档作废却没告诉玩家"
+    assert "没能恢复" not in g_stale.status(), "这句提示说了第二遍"
+
+    SAVE_DIR, LEGACY_PATH, CURRENT_PATH = keep_rc
+    globals()["GAME"] = keep_game
+    print("断线重连验证通过（重启捞得回/new_run 盖不掉/status 还得回原文/"
+          "明说才弃且不入档案/旧档作废会说一声）。")
 
     print("第五轮试玩反馈回归通过（战报报实际结算值/誓约认得自己那条豁免/"
           "临终只给进过教堂的人/每世只有一次岔口）。")

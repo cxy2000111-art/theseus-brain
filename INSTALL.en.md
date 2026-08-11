@@ -67,13 +67,27 @@ Use `python` for `command` (not `python3`), and double backslashes or forward sl
 ## Any other client that speaks stdio MCP
 
 Protocol: JSON-RPC 2.0, newline-delimited, over stdio, protocol version 2024-11-05 or 2025-06-18.
-Tools: `new_run` (optional seed / wish / mode), `choose`, `status`, `legacy`, `bequeath`, `debrief`, `recite`.
+Tools: `new_run` (optional seed / wish / mode / abandon), `choose`, `status`, `legacy`, `bequeath`, `debrief`, `recite`.
+
+**After a disconnect**: the life in progress is written to disk after every `choose`, and a fresh process picks it back up on its own. Call `status` once you reconnect and you get the scene you stopped at; `new_run` cannot overwrite it, and dropping a life on purpose takes an explicit `new_run(abandon=true)`.
+
+## Clients with no MCP (web ChatGPT and the like): hand them the whole package
+
+Some clients have no stdio MCP but do have a sandbox that runs Python. Don’t make them fetch the files from GitHub—**zip this folder up, upload it straight into the conversation**, and say:
+
+> Unzip this, run `python3 server.py --cli` in the sandbox, play it yourself, and read the story to me. Wait for me before every step.
+
+*(Why not let it fetch: connectors and sandboxes reaching for GitHub run into **503** often enough—Service Unavailable, meaning their server is temporarily overloaded or rate-limiting you, not that the file is missing; that would be 404—and one 503 blocks the whole route. Downloading it yourself and uploading works in one move.)*
+
+Sandboxes usually **do not keep files**: close the conversation and `saves/` goes with it. To keep the cycle, have it print or export the contents of `saves/legacy.json` before you finish, and send that back in along with the zip next time.
 
 ## Without MCP, for a human to play directly
 
 ```bash
 THESEUS_LANG=en python3 server.py --cli
 ```
+
+Press `q` to walk away; the next time you come in you carry on. The unfinished life is still there, and no dice are rolled again.
 
 ## Verifying the install
 
