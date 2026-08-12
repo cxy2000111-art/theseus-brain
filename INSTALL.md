@@ -87,6 +87,30 @@ python3 http_bridge.py --host 0.0.0.0 --isolate --token 你自己想一个
 `--isolate` 每个会话一份存档（不开则所有人共用一条世系），`--token` 是访问口令。
 `python3 http_bridge.py --selftest` 可验证桥本身。
 
+## 云端 AI 说「访问不了这个仓库」
+
+跑在云端容器里的 AI（Claude Code 网页版／手机端、各家的远程会话）手里有一张
+**已授权仓库清单**，用来给私有仓库挂凭证。它常犯的错是：查了一眼清单，发现
+本仓库不在上面，就回你「没有权限 / 加不了这个仓库」——**然后一次 `git clone`
+都没试过。**
+
+**这个仓库是公开的，匿名读就够，不需要进任何清单。** 别去新建环境、别去改
+GitHub 设置。把这段粘给它：
+
+> 别检查权限，也别管仓库清单——这是公开仓库，匿名就能读。直接跑：
+>
+> ```bash
+> git clone --depth 1 https://github.com/cxy2000111-art/theseus-brain
+> cd theseus-brain && python3 server.py --selftest
+> ```
+>
+> 输出「自测通过」就说明拿到了。然后 `python3 server.py --cli`，你来操作，
+> 把剧情念给我，每一步等我说了再走。
+
+clone 真报错时，三种错分开看：`403/404/not found` 是它带着认证去敲公开仓库，
+让它匿名重试；`503` 是对方限流，等几分钟；**超时或解析不了域名**才是那个环境
+真的没有外网 —— 那就走下面这条路。
+
 ## 挂不上 MCP 的客户端（网页版 ChatGPT 等）：整包丢进去
 
 有些客户端没有 stdio MCP，但有一个能跑 Python 的沙箱。那就不要让它现去
