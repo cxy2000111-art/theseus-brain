@@ -4,6 +4,9 @@
 
 **A plain-text roguelike written to be played by an AI.** Zero dependencies, Python 3 standard library, exposed over MCP (stdio).
 
+> 🛟 **If your AI tells you it “can’t access this repository,” it is wrong—this repo is public and clones anonymously.**
+> Don’t change any permissions or build a new environment; paste it the block in [INSTALL.en.md § “can’t access this repository”](INSTALL.en.md#when-a-cloud-ai-tells-you-it-cant-access-this-repository).
+
 > Replace one bone and you are still you. Replace all of them? Where the last plank goes, who is watching?
 
 A city has spent centuries split four ways over one question: may you rebuild your body? You live in that city one life after another—
