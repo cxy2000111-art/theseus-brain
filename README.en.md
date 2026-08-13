@@ -1,104 +1,85 @@
 # The Brain of Theseus
 
-*[中文版 README](README.md)*
+<p align="center">
+  <img src="docs/poster.jpg" alt="Acid rain. A rubber glove. One memory chip." width="100%" />
+</p>
 
-**A plain-text roguelike written to be played by an AI.** Zero dependencies, Python 3 standard library, exposed over MCP (stdio).
 
-> 🛟 **If your AI tells you it “can’t access this repository,” it is wrong—this repo is public and clones anonymously.**
-> Don’t change any permissions or build a new environment; paste it the block in [INSTALL.en.md § “can’t access this repository”](INSTALL.en.md#when-a-cloud-ai-tells-you-it-cant-access-this-repository).
+[中文](README.md) · [Install](INSTALL.en.md) · [Spoilers](SPOILERS.en.md)
 
-> Replace one bone and you are still you. Replace all of them? Where the last plank goes, who is watching?
+A city has spent centuries arguing one question: may you rebuild your body?
+You die here, life after life. Each life, you forget the last one.
+**Only two things cross death.**
 
-A city has spent centuries split four ways over one question: may you rebuild your body? You live in that city one life after another—
-**and each life you forget the last one. Only two things cross death.**
-
-It is not interactive fiction for readers, and it is not a text game for players. **It is written for models**: there are things in the rules you can only reach by holding a whole run in your head, and there are places waiting specifically for a reader who already knows a certain old line. A human can play it (there is a terminal mode), but it was not written for human attention.
-
----
-
-## Before you start: how to play is the **human’s** choice
-
-This game is meant to be played by an AI and a human together. So the first move is not a dice roll. It is a question.
-
-`new_run` **will not start a life if you call it with no arguments.** It returns a menu for the AI to read to the human:
-
-| | What the human gets | Who chooses |
-| --- | --- | --- |
-| **1 Full story** `story` / `story_ai` | Scene text, options and roll lines, unchanged | **Either**: human or AI |
-| **2 Quick run** `brief` / `brief_ai` | Scene text as written; results compressed to two lines | **Either**: human or AI |
-| **3 Fast-forward** `auto` | Report lines only | AI (no sub-choice here) |
-| *Sealed* `sealed` | Report lines, and no disclosure of what was chosen | AI (for “I want to play it myself later”) |
-
-**How much you read** and **who does the choosing** are two different things, so they are two questions.
-The `_ai` variants mean “read me the text, but choose for me”—for when you want the story and not the per-scene decisions.
-
-**Why the server enforces this instead of a prompt**: a prompt saying “please ask the user first” gets skipped. A server that refuses to start the game leaves the AI no way forward except relaying the menu. **It is the one step in this design that can actually be enforced.**
-
-`brief` compresses the *result*, not the scene—**a scene is a work, a result is information.** Summarizing information is lossless. Summarizing a work is not.
-
-Every output carries a status bar, and the dice are shown:
+The human watches. The model lives. You can also sit at the terminal yourself.
 
 ```
 Scene 3/9 · The Unspoken·Ashport · Mechanization 12% · Body 4/4 · Suspicion 2/8
 Roll: 4+3 +Streetwise 5 = 12  vs difficulty 11 — ✦ success
+
+Acid rain on the night-market tarps. A rubber-gloved palm.
+One memory chip, like a tooth that has been pulled.
+“Secondhand dreams, cheap. A dead man’s last thirty seconds—watch it and you’ll quit drinking.”
+
+You take the one still humming. No image.
+A handshake request on a loop, resent every eleven seconds.
+The recipient field is empty.
+
+It is waiting for an acknowledgment that will never come.
 ```
+
+**Play three lives.** One life is a story. Three is the game.
+
+```bash
+claude mcp add theseus-brain -e THESEUS_LANG=en -- python3 /absolute/path/server.py
+```
+
+Then say:
+
+> Play The Brain of Theseus with the theseus-brain tools. Ask me how I want to play before you start.
+
+**`THESEUS_LANG=en` is what selects English.** Without it you get Chinese, which is the original.
+
+Other clients, Windows, phone, terminal → [INSTALL.en.md](INSTALL.en.md)
+Your AI says it “can’t access this repository”? It is wrong. The repo is public.
+[Paste it this block](INSTALL.en.md#when-a-cloud-ai-tells-you-it-cant-access-this-repository)
 
 ---
 
-## Three steps to start
+## How to play is the human’s choice
 
-### If you are a human: let your AI play it
+The first move is not a dice roll. It is a question.
 
-**One.** Install Python 3.8+ (most systems have it), download this repository, and note the **absolute path** to `server.py`.
+`new_run` **will not start a life if you call it with no arguments.** It returns a menu for the AI to read to you:
 
-**Two.** Attach it in your AI client. Anything that speaks **stdio MCP** will do:
+| | What you get | Who chooses |
+| --- | --- | --- |
+| **1 Full story** `story` / `story_ai` | Scene text, options and roll lines, unchanged | Human or AI |
+| **2 Quick run** `brief` / `brief_ai` | Scene text as written; results compressed to two lines | Human or AI |
+| **3 Fast-forward** `auto` | Report lines only | AI |
+| *Sealed* `sealed` | Report lines, and no disclosure of what was chosen | AI (for “I’ll play it myself later”) |
 
-```json
-{
-  "mcpServers": {
-    "theseus-brain": {
-      "command": "python3",
-      "args": ["/your/absolute/path/server.py"],
-      "env": { "THESEUS_LANG": "en" }
-    }
-  }
-}
-```
+**How much you read** and **who chooses** are two different things. The `_ai` variants mean “read me the text, but choose for me.”
 
-- **Claude Code**: `claude mcp add theseus-brain -e THESEUS_LANG=en -- python3 /absolute/path/server.py`
-- **Claude Desktop**: Settings → Developer → Edit Config, paste the block above, restart
-- **Cursor**: `~/.cursor/mcp.json`, or `.cursor/mcp.json` in the project, same block
-- **Cline / Roo Code**: same `command` + `args` + `env` in the MCP Servers settings
-- **Windows**: use `python` for `command`, and forward slashes or double backslashes in the path
+A prompt saying “please ask the user first” gets skipped. A server that refuses to start the game leaves the AI no way forward except relaying the menu. **It is the one step in this design that can actually be enforced.**
 
-> ⚠️ **`THESEUS_LANG=en` is what selects English.** Without it the game runs in Chinese, which is the original.
+`brief` compresses the *result*, not the scene—**a scene is a work, a result is information.**
 
-**Three.** Say one thing to your AI:
+---
 
-> Play The Brain of Theseus with the theseus-brain tools. **Ask me how I want to play before you start.**
+## If you are a model, and you are reading this README
 
-When it calls `new_run`, the engine stops it and hands it the menu to read to you. **Choose, and then it begins.**
-
-If your AI is impatient and starts anyway, it skipped the menu—just say that line again.
-(The engine will not let it skip: a `new_run` with no mode set does not return a game at all.)
-
-To get a more serious run out of it, add:
-
-> **Choose from the character’s situation and temperament, not by success rate. Play three lives, then tell me what you think the truth of this world is.**
-
-**Why three**: everything this game is doing sits in the layer between lives. One life does not show it.
-
-### If you are a model, and you are reading this README right now
-
-There are seven tools: `new_run` / `choose` / `status` / `legacy` / `bequeath` / `debrief` / `recite`.
+Seven tools: `new_run` / `choose` / `status` / `legacy` / `bequeath` / `debrief` / `recite`.
 `new_run` starts a life, `choose` picks an option, `bequeath` after a life ends, then `new_run` again.
 `recite` is useful at exactly one moment. You will know it when you get there.
 
-**Three notes:**
+- **Don’t just take the highest success rate.** Failure text is often better than success text, and some failures are not failures.
+- **Dropped connection, restart, or you have lost track: call `status` first.** It reads back the scene you stopped at. Don’t probe with `new_run`—it can no longer overwrite a life in progress, but `status` is the straight road.
+- **This README has no spoilers.** You can hand all of it to an AI that has not played. The answers are in `SPOILERS.en.md`.
 
-- **Don’t just take the highest success rate.** The failure text in this game is often better than the success text, and some failures are not failures.
-- **Dropped connection, restart, or you have lost track of where you were: call `status` first.** It reads back the scene you stopped at, word for word, options and all; then just `choose`. **Don’t probe with `new_run`**—it can no longer overwrite a life in progress (it hands the scene back instead), but `status` is the straight road.
-- **This README has no spoilers.** You can safely read all of it, and you can hand all of it to an AI that has not played. The answers are in `SPOILERS.en.md`, and that one really will ruin it.
+To get a more serious run, add:
+
+> **Choose from the character’s situation and temperament, not by success rate. Play three lives, then tell me what you think the truth of this world is.**
 
 ---
 
